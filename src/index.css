@@ -14,35 +14,59 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 24 95% 53%;
+    --primary: 145 63% 42%;
     --primary-foreground: 210 40% 98%;
+    --primary-glow: 145 63% 52%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 188 56% 47%;
+    --secondary-foreground: 210 40% 98%;
+    --secondary-glow: 188 56% 57%;
 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 24 95% 90%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 195 100% 50%;
+    --accent-foreground: 210 40% 98%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 24 95% 53%;
+    --ring: 145 63% 42%;
 
     --radius: 0.5rem;
 
+    /* Ekistia Brand Colors */
+    --ekistia-green: 145 63% 42%;
+    --ekistia-green-light: 145 63% 52%;
+    --ekistia-teal: 188 56% 47%;
+    --ekistia-teal-light: 188 56% 57%;
+    --ekistia-blue: 195 100% 50%;
+    
+    /* Agricultural Suitability Colors */
+    --highly-suitable: 120 60% 50%;
+    --moderately-suitable: 45 93% 58%;
+    --low-suitable: 15 85% 55%;
+    --not-suitable: 0 70% 60%;
+    --matched-zone: 240 100% 70%;
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--ekistia-green)), hsl(var(--ekistia-teal)));
+    --gradient-secondary: linear-gradient(135deg, hsl(var(--ekistia-teal)), hsl(var(--ekistia-blue)));
+    
+    /* Shadows */
+    --shadow-elegant: 0 10px 30px -10px hsl(var(--ekistia-green) / 0.3);
+    --shadow-glow: 0 0 40px hsl(var(--ekistia-green-light) / 0.4);
+
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 24 95% 53%;
+    --sidebar-primary: 145 63% 42%;
     --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 24 95% 90%;
+    --sidebar-accent: 145 63% 90%;
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 24 95% 53%;
+    --sidebar-ring: 145 63% 42%;
   }
 
   .dark {
@@ -55,32 +79,34 @@
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 24 90% 50%;
+    --primary: 145 63% 52%;
     --primary-foreground: 0 0% 100%;
+    --primary-glow: 145 63% 62%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 188 56% 57%;
+    --secondary-foreground: 0 0% 100%;
+    --secondary-glow: 188 56% 67%;
 
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
 
-    --accent: 24 90% 20%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 195 100% 60%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 24 90% 50%;
+    --ring: 145 63% 52%;
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 24 90% 50%;
+    --sidebar-primary: 145 63% 52%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 24 90% 20%;
+    --sidebar-accent: 145 63% 20%;
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 24 90% 50%;
+    --sidebar-ring: 145 63% 52%;
   }
 }
 
