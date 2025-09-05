@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { Barangay, CropType } from '@/types/agricultural';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, Legend, LabelList } from 'recharts';
+import { Barangay, CropType, SuitabilityLevel } from '@/types/agricultural';
 import { TrendingUp, BarChart3, PieChart as PieChartIcon, Sprout } from "lucide-react";
 
 interface AgriculturalDataVisualizationProps {
@@ -33,7 +33,7 @@ export const AgriculturalDataVisualization = ({ barangays }: AgriculturalDataVis
 
   // Prepare data for suitability levels
   const suitabilityLevelData = () => {
-    const levels = ['highly-suitable', 'moderately-suitable', 'low-suitable', 'not-suitable'];
+    const levels: SuitabilityLevel[] = ['highly-suitable', 'moderately-suitable', 'low-suitable', 'not-suitable'];
     return levels.map(level => {
       const totalArea = barangays.reduce((sum, barangay) => {
         return sum + barangay.suitabilityData
@@ -42,12 +42,32 @@ export const AgriculturalDataVisualization = ({ barangays }: AgriculturalDataVis
       }, 0);
 
       return {
-        level: level.split('-').map(word => 
-          word.charAt(0).toUpperCase() + word.slice(1)
-        ).join(' '),
+        level: level.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
         area: Math.round(totalArea),
-        color: getSuitabilityColor(level)
+        color: getSuitabilityHexColor(level)
       };
+    });
+  };
+
+  // Prepare stacked composition data: suitability levels per crop
+  const suitabilityCompositionByCropData = () => {
+    const crops: CropType[] = ['cacao', 'banana', 'mango', 'coconut', 'rice', 'corn'];
+    const levels: SuitabilityLevel[] = ['highly-suitable', 'moderately-suitable', 'low-suitable', 'not-suitable'];
+    return crops.map((crop) => {
+      const levelTotals: Record<SuitabilityLevel, number> = {
+        'highly-suitable': 0,
+        'moderately-suitable': 0,
+        'low-suitable': 0,
+        'not-suitable': 0
+      };
+      barangays.forEach((barangay) => {
+        const s = barangay.suitabilityData.find((d) => d.crop === crop);
+        if (s) {
+          levelTotals[s.suitabilityLevel] += s.suitableArea;
+        }
+      });
+      const label = `${getCropEmoji(crop)} ${crop.charAt(0).toUpperCase() + crop.slice(1)}`;
+      return { crop: label, ...levelTotals };
     });
   };
 
@@ -83,7 +103,7 @@ export const AgriculturalDataVisualization = ({ barangays }: AgriculturalDataVis
     return emojiMap[crop] || '🌱';
   };
 
-  const getSuitabilityColor = (level: string): string => {
+  const getSuitabilityHexColor = (level: SuitabilityLevel): string => {
     switch (level) {
       case 'highly-suitable': return '#22c55e';
       case 'moderately-suitable': return '#eab308';
@@ -91,6 +111,23 @@ export const AgriculturalDataVisualization = ({ barangays }: AgriculturalDataVis
       case 'not-suitable': return '#ef4444';
       default: return '#94a3b8';
     }
+  };
+
+  const levelOrder: SuitabilityLevel[] = ['not-suitable', 'low-suitable', 'moderately-suitable', 'highly-suitable'];
+
+  // Custom label renderer for donut to avoid overlaps: only show for sizeable slices
+  const renderDonutLabel = (props: any) => {
+    const { cx, cy, midAngle, outerRadius, percent, payload } = props;
+    if (!percent || percent < 0.06) return null; // hide labels <6%
+    const RADIAN = Math.PI / 180;
+    const radius = outerRadius + 14;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    return (
+      <text x={x} y={y} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" style={{ fontSize: 12 }}>
+        {payload.level}
+      </text>
+    );
   };
 
   return (
@@ -163,72 +200,70 @@ export const AgriculturalDataVisualization = ({ barangays }: AgriculturalDataVis
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Crop Suitability Distribution */}
+        {/* Suitability Composition by Crop (Stacked) */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-foreground">Crop Suitability by Area</CardTitle>
+            <CardTitle className="text-foreground">Suitability Composition by Crop</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={cropSuitabilityData()}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                <XAxis 
-                  dataKey="crop" 
-                  tick={{ fontSize: 12 }}
-                  tickFormatter={(value, index) => {
-                    const item = cropSuitabilityData()[index];
-                    return `${item?.emoji} ${value}`;
-                  }}
-                />
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={suitabilityCompositionByCropData()}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
+                <XAxis dataKey="crop" tick={{ fontSize: 12 }} interval={0} />
                 <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip 
-                  formatter={(value: number) => [`${value.toLocaleString()} ha`, 'Suitable Area']}
-                />
-                <Bar dataKey="suitableArea" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                <Tooltip formatter={(value: number, name: string) => [`${(value as number).toLocaleString()} ha`, name.split('-').map(w => w.charAt(0).toUpperCase()+w.slice(1)).join(' ')]} />
+                <Legend />
+                {levelOrder.map((lvl) => (
+                  <Bar key={lvl} dataKey={lvl} stackId="a" fill={getSuitabilityHexColor(lvl)} radius={[4, 4, 0, 0]} />
+                ))}
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Suitability Level Distribution */}
+        {/* Suitability Level Distribution (Donut) */}
         <Card>
           <CardHeader>
             <CardTitle className="text-foreground">Suitability Level Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={320}>
               <PieChart>
                 <Pie
                   data={suitabilityLevelData()}
                   cx="50%"
                   cy="50%"
-                  outerRadius={80}
-                  fill="#8884d8"
+                  innerRadius={50}
+                  outerRadius={90}
+                  paddingAngle={2}
+                  minAngle={8}
                   dataKey="area"
-                  label={({ level, area }) => `${level}: ${area.toLocaleString()} ha`}
+                  label={renderDonutLabel}
+                  labelLine={false}
                 >
                   {suitabilityLevelData().map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: number) => [`${value.toLocaleString()} ha`, 'Area']} />
+                <Tooltip formatter={(value: number, name: string, props: any) => [`${(value as number).toLocaleString()} ha`, props?.payload?.level]} />
+                <Legend />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
 
-      {/* Top Barangays by Agricultural Potential */}
+      {/* Top Barangays by Agricultural Potential (Stacked) */}
       <Card>
         <CardHeader>
           <CardTitle className="text-foreground">Top Barangays by Agricultural Area</CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={400}>
-            <BarChart data={topBarangaysData()} layout="horizontal">
-              <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+            <BarChart data={topBarangaysData()} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
               <XAxis type="number" tick={{ fontSize: 12 }} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={100} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={120} />
               <Tooltip 
                 formatter={(value: number, name: string) => {
                   const labels: Record<string, string> = {
@@ -236,37 +271,38 @@ export const AgriculturalDataVisualization = ({ barangays }: AgriculturalDataVis
                     'available': 'Available Land',
                     'matched': 'Matched Zones'
                   };
-                  return [`${value.toLocaleString()} ha`, labels[name] || name];
+                  return [`${(value as number).toLocaleString()} ha`, labels[name] || name];
                 }}
               />
-              <Bar dataKey="agricultural" fill="hsl(var(--primary))" name="agricultural" />
-              <Bar dataKey="available" fill="hsl(var(--secondary))" name="available" />
-              <Bar dataKey="matched" fill="hsl(var(--accent))" name="matched" />
+              <Legend />
+              <Bar dataKey="agricultural" stackId="a" fill="hsl(var(--primary))" name="Agricultural" />
+              <Bar dataKey="available" stackId="a" fill="hsl(var(--secondary))" name="Available" />
+              <Bar dataKey="matched" stackId="a" fill="hsl(var(--accent))" name="Matched" />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
       </Card>
 
-      {/* Development Matching Trends */}
+      {/* Demand Intensity by Barangay (Area) */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-foreground">Development Activity by Barangay</CardTitle>
+          <CardTitle className="text-foreground">Demand Intensity by Barangay</CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={topBarangaysData().slice(0, 8)}>
-              <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-              <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={60} />
+            <AreaChart data={topBarangaysData().slice(0, 8)}>
+              <defs>
+                <linearGradient id="colorDemand" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="hsl(var(--accent))" stopOpacity={0.8}/>
+                  <stop offset="95%" stopColor="hsl(var(--accent))" stopOpacity={0.1}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} />
               <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Line 
-                type="monotone" 
-                dataKey="demands" 
-                stroke="hsl(var(--accent))" 
-                strokeWidth={2}
-                name="Active Demands"
-              />
-            </LineChart>
+              <Tooltip formatter={(value: number) => [`${(value as number).toLocaleString()}`, 'Active Demands']} />
+              <Area type="monotone" dataKey="demands" stroke="hsl(var(--accent))" fillOpacity={1} fill="url(#colorDemand)" />
+            </AreaChart>
           </ResponsiveContainer>
         </CardContent>
       </Card>
