@@ -60,7 +60,7 @@ const EkistiaIndex = () => {
       
       {/* Selected Barangay Details Panel */}
       {selectedBarangay && (
-        <div className={`fixed ${isMobile ? 'bottom-16 left-4 right-4 top-auto z-30' : 'top-32 right-4 z-30 w-96'} max-h-[calc(100vh-140px)] overflow-auto bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border transition-all duration-300 ease-in-out`}>
+        <div className={`fixed ${isMobile ? 'bottom-16 left-4 right-4 top-auto z-30' : 'top-24 right-4 z-30 w-96'} max-h-[calc(100vh-120px)] overflow-auto bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border transition-all duration-300 ease-in-out`}>
           <BarangayDetails 
             barangay={selectedBarangay}
             selectedCrop={selectedCrop}
@@ -71,7 +71,7 @@ const EkistiaIndex = () => {
       
       {/* Floating Panels */}
       {activePanel === 'filters' && (
-        <div className={`fixed ${isMobile ? 'top-32 left-4 right-4' : 'top-32 left-4 w-96'} z-30 bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-4`}>
+        <div className={`fixed ${isMobile ? 'top-24 left-4 right-4' : 'top-24 left-4 w-96'} z-30 bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-4`}>
           <button 
             onClick={() => setActivePanel(null)}
             className="absolute top-2 right-2 p-1 rounded-full hover:bg-muted transition-colors"
@@ -91,7 +91,7 @@ const EkistiaIndex = () => {
       )}
       
       {activePanel === 'data' && (
-        <div className={`fixed ${isMobile ? 'top-32 left-4 right-4' : 'top-32 left-4 w-[calc(100%-2rem)] max-w-6xl'} z-30 max-h-[calc(100vh-140px)] overflow-auto bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-4`}>
+        <div className={`fixed ${isMobile ? 'top-24 left-4 right-4' : 'top-24 left-4 w-[calc(100%-2rem)] max-w-6xl'} z-30 max-h-[calc(100vh-120px)] overflow-auto bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-4`}>
           <button 
             onClick={() => setActivePanel(null)}
             className="absolute top-2 right-2 p-1 rounded-full hover:bg-muted transition-colors"
@@ -103,7 +103,7 @@ const EkistiaIndex = () => {
       )}
       
       {activePanel === 'marketplace' && (
-        <div className={`fixed ${isMobile ? 'top-32 left-4 right-4' : 'top-32 left-4 w-[calc(100%-2rem)] max-w-6xl'} z-30 max-h-[calc(100vh-140px)] overflow-auto bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-4`}>
+        <div className={`fixed ${isMobile ? 'top-24 left-4 right-4' : 'top-24 left-4 w-[calc(100%-2rem)] max-w-6xl'} z-30 max-h-[calc(100vh-120px)] overflow-auto bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-4`}>
           <button 
             onClick={() => setActivePanel(null)}
             className="absolute top-2 right-2 p-1 rounded-full hover:bg-muted transition-colors"
@@ -120,7 +120,7 @@ const EkistiaIndex = () => {
       )}
 
       {activePanel === 'documents' && (
-        <div className={`fixed ${isMobile ? 'top-32 left-4 right-4' : 'top-32 left-4 w-[calc(100%-2rem)] max-w-4xl'} z-30 max-h-[calc(100vh-140px)] overflow-auto bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-4`}>
+        <div className={`fixed ${isMobile ? 'top-24 left-4 right-4' : 'top-24 left-4 w-[calc(100%-2rem)] max-w-4xl'} z-30 max-h-[calc(100vh-120px)] overflow-auto bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-4`}>
           <button 
             onClick={() => setActivePanel(null)}
             className="absolute top-2 right-2 p-1 rounded-full hover:bg-muted transition-colors"

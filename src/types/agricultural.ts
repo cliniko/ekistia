@@ -13,7 +13,15 @@ export interface Barangay {
   name: string;
   totalArea: number; // in hectares
   agriculturalArea: number; // in hectares
-  coordinates: number[][]; // polygon coordinates for boundary
+  coordinates: number[][]; // polygon coordinates for boundary (fallback)
+  geojsonFeature?: {
+    type: 'Feature';
+    properties: { [key: string]: any };
+    geometry: {
+      type: 'Polygon' | 'MultiPolygon';
+      coordinates: number[][][] | number[][][][];
+    };
+  }; // real geojson boundary data
   suitabilityData: CropSuitability[];
   priorityZone: boolean;
   availableLand: number; // land offered by farmers
