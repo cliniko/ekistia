@@ -6,7 +6,7 @@ import AgriculturalMapView from '@/components/AgriculturalMapView';
 import CropFilters from '@/components/CropFilters';
 import BarangayDetails from '@/components/BarangayDetails';
 import AgriculturalDataVisualization from '@/components/AgriculturalDataVisualization';
-import DocumentManagement from '@/components/DocumentManagement';
+import TransactionHistory from '@/components/TransactionHistory';
 import MarketplacePanel from '@/components/MarketplacePanel';
 import { barangayData } from '@/data/barangayData';
 import { sampleLandDemands, sampleLandOffers } from '@/data/sampleMarketplaceData';
@@ -17,7 +17,7 @@ const EkistiaIndex = () => {
   const [selectedBarangay, setSelectedBarangay] = useState<Barangay | null>(null);
   const [selectedCrop, setSelectedCrop] = useState<CropType | 'all'>('all');
   const [suitabilityFilter, setSuitabilityFilter] = useState<SuitabilityLevel | 'all'>('all');
-  const [activePanel, setActivePanel] = useState<'filters' | 'data' | 'documents' | 'marketplace' | null>(null);
+  const [activePanel, setActivePanel] = useState<'filters' | 'data' | 'transactions' | 'marketplace' | null>(null);
   const isMobile = useIsMobile();
 
   const filteredBarangays = barangays.filter(barangay => {
@@ -34,7 +34,7 @@ const EkistiaIndex = () => {
     setSuitabilityFilter('all');
   };
 
-  const togglePanel = (panel: 'filters' | 'data' | 'documents' | 'marketplace') => {
+  const togglePanel = (panel: 'filters' | 'data' | 'transactions' | 'marketplace') => {
     setActivePanel(activePanel === panel ? null : panel);
   };
 
@@ -119,7 +119,7 @@ const EkistiaIndex = () => {
         </div>
       )}
 
-      {activePanel === 'documents' && (
+      {activePanel === 'transactions' && (
         <div className={`fixed ${isMobile ? 'top-24 left-4 right-4' : 'top-24 left-4 w-[calc(100%-2rem)] max-w-4xl'} z-30 max-h-[calc(100vh-120px)] overflow-auto bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-4`}>
           <button 
             onClick={() => setActivePanel(null)}
@@ -127,7 +127,7 @@ const EkistiaIndex = () => {
           >
             <X size={18} />
           </button>
-          <DocumentManagement />
+          <TransactionHistory />
         </div>
       )}
       

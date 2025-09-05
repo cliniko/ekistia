@@ -1,12 +1,12 @@
 import React from 'react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { BarChart3, FileText, Filter, ShoppingCart, Users, MapPin } from "lucide-react";
+import { BarChart3, History, Filter, ShoppingCart, Users, MapPin } from "lucide-react";
 import logo from './ekistia_logo.png';
 
 interface EkistiaHeaderProps {
-  activePanel: 'filters' | 'data' | 'documents' | 'marketplace' | null;
-  togglePanel: (panel: 'filters' | 'data' | 'documents' | 'marketplace') => void;
+  activePanel: 'filters' | 'data' | 'transactions' | 'marketplace' | null;
+  togglePanel: (panel: 'filters' | 'data' | 'transactions' | 'marketplace') => void;
   totalAvailableLand: number;
   activeDemands: number;
 }
@@ -56,13 +56,13 @@ export const EkistiaHeader = ({
             Data Analysis
           </Button>
           <Button
-            variant={activePanel === 'documents' ? 'default' : 'ghost'}
+            variant={activePanel === 'transactions' ? 'default' : 'ghost'}
             size="sm"
-            onClick={() => togglePanel('documents')}
+            onClick={() => togglePanel('transactions')}
             className="gap-2"
           >
-            <FileText className="w-4 h-4" />
-            Documents
+            <History className="w-4 h-4" />
+            Transaction History
           </Button>
           <Button
             variant={activePanel === 'marketplace' ? 'default' : 'ghost'}
@@ -128,13 +128,13 @@ export const EkistiaHeader = ({
             Data
           </Button>
           <Button
-            variant={activePanel === 'documents' ? 'default' : 'ghost'}
+            variant={activePanel === 'transactions' ? 'default' : 'ghost'}
             size="sm"
-            onClick={() => togglePanel('documents')}
+            onClick={() => togglePanel('transactions')}
             className="gap-1 text-xs whitespace-nowrap"
           >
-            <FileText className="w-3 h-3" />
-            Docs
+            <History className="w-3 h-3" />
+            Transactions
           </Button>
           <Button
             variant={activePanel === 'marketplace' ? 'default' : 'ghost'}
