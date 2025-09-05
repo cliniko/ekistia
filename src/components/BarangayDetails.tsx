@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Barangay, CropType } from '@/types/agricultural';
+import { Barangay, CropType, SuitabilityLevel } from '@/types/agricultural';
 import { X, MapPin, Sprout, Users, Building2, TrendingUp } from "lucide-react";
 
 interface BarangayDetailsProps {
@@ -13,6 +13,17 @@ interface BarangayDetailsProps {
 }
 
 export const BarangayDetails = ({ barangay, selectedCrop, onClose }: BarangayDetailsProps) => {
+  // Unified color system that matches the map boundaries
+  const getSuitabilityHexColor = (level: SuitabilityLevel): string => {
+    switch (level) {
+      case 'highly-suitable': return '#22c55e'; // Green
+      case 'moderately-suitable': return '#eab308'; // Yellow
+      case 'low-suitable': return '#f97316'; // Orange
+      case 'not-suitable': return '#ef4444'; // Red
+      default: return '#94a3b8'; // Gray
+    }
+  };
+
   const getSuitabilityColor = (level: string): string => {
     switch (level) {
       case 'highly-suitable': return 'bg-green-500';
@@ -22,6 +33,42 @@ export const BarangayDetails = ({ barangay, selectedCrop, onClose }: BarangayDet
       default: return 'bg-muted';
     }
   };
+
+  // Get suitability level for the selected crop (matching map logic)
+  const getBarangaySuitability = (barangay: Barangay, crop: CropType | 'all'): { level: SuitabilityLevel; area: number } => {
+    if (crop === 'all') {
+      // Find the best suitability across all crops
+      let bestLevel: SuitabilityLevel = 'not-suitable';
+      let totalArea = 0;
+      
+      for (const suitability of barangay.suitabilityData) {
+        totalArea += suitability.suitableArea;
+        if (suitability.suitabilityLevel === 'highly-suitable' && bestLevel !== 'highly-suitable') {
+          bestLevel = 'highly-suitable';
+        } else if (suitability.suitabilityLevel === 'moderately-suitable' && bestLevel === 'not-suitable') {
+          bestLevel = 'moderately-suitable';
+        }
+      }
+      
+      return { level: bestLevel, area: totalArea };
+    }
+    
+    const cropSuitability = barangay.suitabilityData.find(s => s.crop === crop);
+    return cropSuitability 
+      ? { level: cropSuitability.suitabilityLevel, area: cropSuitability.suitableArea }
+      : { level: 'not-suitable', area: 0 };
+  };
+
+  // Calculate the boundary color for this barangay
+  const currentSuitability = getBarangaySuitability(barangay, selectedCrop || 'all');
+  let boundaryColor = getSuitabilityHexColor(currentSuitability.level);
+  let isMatchedZone = false;
+
+  // Special styling for matched zones (matches map logic)
+  if (barangay.matchedArea && barangay.matchedArea > 0) {
+    boundaryColor = '#8b5cf6'; // Purple for matched zones
+    isMatchedZone = true;
+  }
 
   const getSuitabilityLabel = (level: string): string => {
     return level.split('-').map(word => 
@@ -44,7 +91,13 @@ export const BarangayDetails = ({ barangay, selectedCrop, onClose }: BarangayDet
   const utilizationRate = (barangay.agriculturalArea / barangay.totalArea) * 100;
 
   return (
-    <Card className="w-full max-w-md shadow-lg border-border/50">
+    <Card 
+      className="w-full max-w-md shadow-lg border-2 border-border/50" 
+      style={{ 
+        borderColor: boundaryColor,
+        boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 0 1px ${boundaryColor}20`
+      }}
+    >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">

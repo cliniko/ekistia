@@ -40,8 +40,8 @@ export const AgriculturalMapView = ({ barangays, selectedCrop, onSelectBarangay 
   };
 
   // Get suitability level for a barangay and crop
-  const getBarangaySuitability = (barangay: Barangay, crop: CropType): { level: SuitabilityLevel; area: number } => {
-    if (selectedCrop === 'all') {
+  const getBarangaySuitability = React.useCallback((barangay: Barangay, crop: CropType | 'all'): { level: SuitabilityLevel; area: number } => {
+    if (crop === 'all') {
       // Find the best suitability across all crops
       let bestLevel: SuitabilityLevel = 'not-suitable';
       let totalArea = 0;
@@ -62,11 +62,99 @@ export const AgriculturalMapView = ({ barangays, selectedCrop, onSelectBarangay 
     return cropSuitability 
       ? { level: cropSuitability.suitabilityLevel, area: cropSuitability.suitableArea }
       : { level: 'not-suitable', area: 0 };
-  };
+  }, []);
 
 
-  // Load PSA ArcGIS REST service layer
-  const loadPSABoundaries = () => {
+  // Memoized function to find matching barangay
+  const findMatchingBarangay = React.useCallback((brgyName: string) => {
+    return barangays.find(b => 
+      b.name.toLowerCase() === brgyName?.toLowerCase() ||
+      b.name.toLowerCase().includes(brgyName?.toLowerCase()) ||
+      brgyName?.toLowerCase().includes(b.name.toLowerCase())
+    );
+  }, [barangays]);
+
+  // Click handler for PSA layer
+  const handlePSALayerClick = React.useCallback((e: any) => {
+    const feature = e.layer.feature;
+    const matchingBarangay = findMatchingBarangay(feature.properties.brgy_name);
+
+    if (matchingBarangay) {
+      onSelectBarangay(matchingBarangay);
+    }
+  }, [findMatchingBarangay, onSelectBarangay]);
+
+  // Popup handler for PSA layer
+  const getPSALayerPopup = React.useCallback((layer: any) => {
+    const feature = layer.feature;
+    const matchingBarangay = findMatchingBarangay(feature.properties.brgy_name);
+
+    if (matchingBarangay) {
+      const suitability = getBarangaySuitability(matchingBarangay, selectedCrop as CropType);
+      const cropInfo = selectedCrop === 'all' 
+        ? `Total Suitable Area: ${suitability.area.toFixed(1)} ha`
+        : `${selectedCrop.charAt(0).toUpperCase() + selectedCrop.slice(1)} Suitable: ${suitability.area.toFixed(1)} ha`;
+        
+      const matchInfo = matchingBarangay.matchedArea 
+        ? `<br><strong>Matched Zone: ${matchingBarangay.matchedArea} ha</strong>`
+        : '';
+
+      return `<div class="text-sm">
+        <strong>${matchingBarangay.name}</strong><br>
+        PSA Code: ${feature.properties.brgy_code || 'N/A'}<br>
+        Total Area: ${matchingBarangay.totalArea.toFixed(1)} ha<br>
+        Agricultural Area: ${matchingBarangay.agriculturalArea.toFixed(1)} ha<br>
+        ${cropInfo}<br>
+        Available Land: ${matchingBarangay.availableLand} ha<br>
+        Active Demands: ${matchingBarangay.activeDemands}${matchInfo}
+      </div>`;
+    }
+
+    return `<div class="text-sm">
+      <strong>${feature.properties.brgy_name || 'Unknown Barangay'}</strong><br>
+      PSA Code: ${feature.properties.brgy_code || 'N/A'}<br>
+      <em>No agricultural data available</em>
+    </div>`;
+  }, [findMatchingBarangay, getBarangaySuitability, selectedCrop]);
+
+  // Get style for a specific feature and crop (stable function)
+  const getFeatureStyle = React.useCallback((feature: any, crop: CropType | 'all') => {
+    const matchingBarangay = findMatchingBarangay(feature.properties.brgy_name);
+
+    if (matchingBarangay) {
+      const suitability = getBarangaySuitability(matchingBarangay, crop);
+      let fillColor = getSuitabilityColor(suitability.level);
+      let strokeColor = fillColor;
+      let fillOpacity = 0.6;
+
+      // Special styling for matched zones
+      if (matchingBarangay.matchedArea && matchingBarangay.matchedArea > 0) {
+        fillColor = '#8b5cf6'; // Purple for matched zones
+        strokeColor = '#7c3aed';
+        fillOpacity = 0.8;
+      }
+
+      return {
+        fillColor: fillColor,
+        weight: 2,
+        opacity: 1,
+        color: strokeColor,
+        fillOpacity: fillOpacity
+      };
+    }
+
+    // Default styling for unmatched barangays - completely transparent
+    return {
+      fillColor: '#94a3b8',
+      weight: 0,
+      opacity: 0,
+      color: '#64748b',
+      fillOpacity: 0
+    };
+  }, [findMatchingBarangay, getBarangaySuitability, getSuitabilityColor]);
+
+  // Load PSA ArcGIS REST service layer (stable - no crop dependency)
+  const loadPSABoundaries = React.useCallback(() => {
     if (!mapRef.current) return;
 
     // Remove existing PSA layer if it exists
@@ -76,98 +164,24 @@ export const AgriculturalMapView = ({ barangays, selectedCrop, onSelectBarangay 
 
     try {
       // PSA ArcGIS REST service URL for Barangay boundaries
+      // Start with default styling that will be updated later
       psaLayerRef.current = esri.featureLayer({
         url: 'https://portal.georisk.gov.ph/arcgis/rest/services/PSA/Barangay/MapServer/4',
-        style: function (feature: any) {
-          // Find matching barangay to get suitability data
-          const matchingBarangay = barangays.find(b => 
-            b.name.toLowerCase() === feature.properties.brgy_name?.toLowerCase() ||
-            b.name.toLowerCase().includes(feature.properties.brgy_name?.toLowerCase()) ||
-            feature.properties.brgy_name?.toLowerCase().includes(b.name.toLowerCase())
-          );
-
-          if (matchingBarangay) {
-            const suitability = getBarangaySuitability(matchingBarangay, selectedCrop as CropType);
-            let fillColor = getSuitabilityColor(suitability.level);
-            let strokeColor = fillColor;
-            let fillOpacity = 0.6;
-
-            // Special styling for matched zones
-            if (matchingBarangay.matchedArea && matchingBarangay.matchedArea > 0) {
-              fillColor = '#8b5cf6'; // Purple for matched zones
-              strokeColor = '#7c3aed';
-              fillOpacity = 0.8;
-            }
-
-            return {
-              fillColor: fillColor,
-              weight: 2,
-              opacity: 1,
-              color: strokeColor,
-              fillOpacity: fillOpacity
-            };
-          }
-
-          // Default styling for unmatched barangays - completely transparent
+        style: function(feature: any) {
+          // Default basic styling - will be updated by useEffect
           return {
             fillColor: '#94a3b8',
-            weight: 0,
-            opacity: 0,
+            weight: 1,
+            opacity: 0.3,
             color: '#64748b',
-            fillOpacity: 0
+            fillOpacity: 0.2
           };
         }
       });
 
-      // Add event listeners
-      psaLayerRef.current.on('click', function(e: any) {
-        const feature = e.layer.feature;
-        const matchingBarangay = barangays.find(b => 
-          b.name.toLowerCase() === feature.properties.brgy_name?.toLowerCase() ||
-          b.name.toLowerCase().includes(feature.properties.brgy_name?.toLowerCase()) ||
-          feature.properties.brgy_name?.toLowerCase().includes(b.name.toLowerCase())
-        );
-
-        if (matchingBarangay) {
-          onSelectBarangay(matchingBarangay);
-        }
-      });
-
-      psaLayerRef.current.bindPopup(function (layer: any) {
-        const feature = layer.feature;
-        const matchingBarangay = barangays.find(b => 
-          b.name.toLowerCase() === feature.properties.brgy_name?.toLowerCase() ||
-          b.name.toLowerCase().includes(feature.properties.brgy_name?.toLowerCase()) ||
-          feature.properties.brgy_name?.toLowerCase().includes(b.name.toLowerCase())
-        );
-
-        if (matchingBarangay) {
-          const suitability = getBarangaySuitability(matchingBarangay, selectedCrop as CropType);
-          const cropInfo = selectedCrop === 'all' 
-            ? `Total Suitable Area: ${suitability.area.toFixed(1)} ha`
-            : `${selectedCrop.charAt(0).toUpperCase() + selectedCrop.slice(1)} Suitable: ${suitability.area.toFixed(1)} ha`;
-            
-          const matchInfo = matchingBarangay.matchedArea 
-            ? `<br><strong>Matched Zone: ${matchingBarangay.matchedArea} ha</strong>`
-            : '';
-
-          return `<div class="text-sm">
-            <strong>${matchingBarangay.name}</strong><br>
-            PSA Code: ${feature.properties.brgy_code || 'N/A'}<br>
-            Total Area: ${matchingBarangay.totalArea.toFixed(1)} ha<br>
-            Agricultural Area: ${matchingBarangay.agriculturalArea.toFixed(1)} ha<br>
-            ${cropInfo}<br>
-            Available Land: ${matchingBarangay.availableLand} ha<br>
-            Active Demands: ${matchingBarangay.activeDemands}${matchInfo}
-          </div>`;
-        }
-
-        return `<div class="text-sm">
-          <strong>${feature.properties.brgy_name || 'Unknown Barangay'}</strong><br>
-          PSA Code: ${feature.properties.brgy_code || 'N/A'}<br>
-          <em>No agricultural data available</em>
-        </div>`;
-      });
+      // Add event listeners (these won't change unless handlers change)
+      psaLayerRef.current.on('click', handlePSALayerClick);
+      psaLayerRef.current.bindPopup(getPSALayerPopup);
 
       psaLayerRef.current.addTo(mapRef.current);
       
@@ -181,7 +195,7 @@ export const AgriculturalMapView = ({ barangays, selectedCrop, onSelectBarangay 
       console.error('Failed to load PSA boundaries:', error);
       setPsaLayerLoaded(false);
     }
-  };
+  }, [handlePSALayerClick, getPSALayerPopup]);
 
 
   useEffect(() => {
@@ -212,13 +226,24 @@ export const AgriculturalMapView = ({ barangays, selectedCrop, onSelectBarangay 
     };
   }, []);
 
-  // Load PSA boundaries when component mounts or data changes
+  // Load PSA boundaries when component mounts or barangays change
   useEffect(() => {
     if (!mapRef.current || isLoading) return;
 
     // Load PSA boundaries
     loadPSABoundaries();
-  }, [barangays, selectedCrop, isLoading]);
+  }, [barangays, isLoading, loadPSABoundaries]);
+
+  // Update layer styling when selectedCrop or psaLayerLoaded changes
+  useEffect(() => {
+    if (!psaLayerRef.current || !mapRef.current || !psaLayerLoaded) return;
+
+    // Create a style function for this specific crop
+    const currentCropStyleFunction = (feature: any) => getFeatureStyle(feature, selectedCrop);
+    
+    // Just update the styling of existing layer
+    psaLayerRef.current.setStyle(currentCropStyleFunction);
+  }, [selectedCrop, getFeatureStyle, psaLayerLoaded]);
 
   return (
     <div className="fixed inset-0 z-0">
