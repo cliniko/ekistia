@@ -40,7 +40,17 @@ interface AgriculturalMapView3DProps {
 }
 
 // You'll need to get your Mapbox access token from https://mapbox.com
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 'YOUR_MAPBOX_TOKEN_HERE';
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+
+// Validate Mapbox token on load
+if (!MAPBOX_TOKEN || MAPBOX_TOKEN === 'YOUR_MAPBOX_TOKEN_HERE') {
+  console.error('❌ MAPBOX TOKEN MISSING: Please set VITE_MAPBOX_TOKEN in your environment variables');
+  console.error('Get your token from: https://account.mapbox.com/access-tokens/');
+}
+
+// Global cache for SAFDZ data to prevent re-fetching
+let safdzDataCache: any = null;
+let safdzDataPromise: Promise<any> | null = null;
 
 export const AgriculturalMapView3D = React.memo(({
   barangays,
@@ -55,6 +65,8 @@ export const AgriculturalMapView3D = React.memo(({
   const [boundariesLoaded, setBoundariesLoaded] = useState(false);
   const [isLegendExpanded, setIsLegendExpanded] = useState(true);
   const [safdzData, setSafdzData] = useState<any>(null);
+  const [safdzLoading, setSafdzLoading] = useState(true);
+  const [safdzError, setSafdzError] = useState<string | null>(null);
   const [showSafdzLayer, setShowSafdzLayer] = useState(true);
   const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/streets-v12');
 
@@ -199,56 +211,63 @@ export const AgriculturalMapView3D = React.memo(({
       : { level: 'not-suitable', area: 0 };
   }, []);
 
-  // Load SAFDZ GeoJSON data
+  // Load SAFDZ GeoJSON data with caching
   useEffect(() => {
-    fetch('/safdz_agri_barangays.geojson')
-      .then(response => response.json())
-      .then(data => {
-        setSafdzData(data);
-        console.log('✅ SAFDZ Agricultural Barangays loaded:', data.features.length, 'features');
-        console.log('Sample SAFDZ feature:', data.features[0]);
-        
-        // Calculate bounds for debugging
-        const allCoords: number[][] = [];
-        data.features.forEach((feature: any) => {
-          const geom = feature.geometry;
-          if (geom.type === 'MultiPolygon') {
-            geom.coordinates.forEach((polygon: any) => {
-              polygon.forEach((ring: any) => {
-                ring.forEach((coord: any) => {
-                  if (Array.isArray(coord) && coord.length >= 2) {
-                    allCoords.push(coord);
-                  }
-                });
-              });
-            });
-          } else if (geom.type === 'Polygon') {
-            geom.coordinates.forEach((ring: any) => {
-              ring.forEach((coord: any) => {
-                if (Array.isArray(coord) && coord.length >= 2) {
-                  allCoords.push(coord);
-                }
-              });
-            });
-          }
+    // If data is already cached, use it immediately
+    if (safdzDataCache) {
+      setSafdzData(safdzDataCache);
+      setSafdzLoading(false);
+      console.log('✅ SAFDZ data loaded from cache:', safdzDataCache.features.length, 'features');
+      return;
+    }
+
+    // If a fetch is already in progress, wait for it
+    if (safdzDataPromise) {
+      setSafdzLoading(true);
+      safdzDataPromise
+        .then(data => {
+          setSafdzData(data);
+          setSafdzLoading(false);
+        })
+        .catch(error => {
+          setSafdzError(error.message || 'Failed to load SAFDZ data');
+          setSafdzLoading(false);
         });
-        
-        if (allCoords.length > 0) {
-          const lngs = allCoords.map(c => c[0]);
-          const lats = allCoords.map(c => c[1]);
-          console.log('SAFDZ geographic bounds:', {
-            minLng: Math.min(...lngs),
-            maxLng: Math.max(...lngs),
-            minLat: Math.min(...lats),
-            maxLat: Math.max(...lats),
-            center: {
-              lng: (Math.min(...lngs) + Math.max(...lngs)) / 2,
-              lat: (Math.min(...lats) + Math.max(...lats)) / 2
-            }
-          });
+      return;
+    }
+
+    console.log('🔄 Loading SAFDZ Agricultural Barangays data...');
+    setSafdzLoading(true);
+    setSafdzError(null);
+
+    // Create and cache the promise
+    safdzDataPromise = fetch('/safdz_agri_barangays.geojson')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
+        return response.json();
       })
-      .catch(error => console.error('Error loading SAFDZ data:', error));
+      .then(data => {
+        if (!data || !data.features || !Array.isArray(data.features)) {
+          throw new Error('Invalid SAFDZ data format');
+        }
+
+        // Cache the data
+        safdzDataCache = data;
+
+        setSafdzData(data);
+        setSafdzLoading(false);
+        console.log('✅ SAFDZ Agricultural Barangays loaded:', data.features.length, 'features');
+        return data;
+      })
+      .catch(error => {
+        console.error('❌ Error loading SAFDZ data:', error);
+        setSafdzError(error.message || 'Failed to load SAFDZ data');
+        setSafdzLoading(false);
+        safdzDataPromise = null; // Reset promise on error
+        throw error;
+      });
   }, []);
 
   // Load hazard layers data
@@ -409,7 +428,7 @@ export const AgriculturalMapView3D = React.memo(({
 
   // Update SAFDZ filters when they change
   useEffect(() => {
-    if (!mapRef.current || !safdzData) return;
+    if (!mapRef.current || !safdzData || safdzLoading || safdzError) return;
 
     const map = mapRef.current.getMap();
 
@@ -462,15 +481,25 @@ export const AgriculturalMapView3D = React.memo(({
     console.log('✅ SAFDZ filters updated:', currentFilters);
   }, [currentFilters, safdzData, externalSafdzFilters]);
 
-  // Mapbox Boundaries are loaded directly as vector tiles - no fetch needed
+  // Mapbox Boundaries are loaded after map is ready
   useEffect(() => {
-    // Boundaries load with the map, set loaded state
-    const timer = setTimeout(() => {
-      setBoundariesLoaded(true);
-      console.log('Mapbox Boundaries v4.5 tileset loaded');
-    }, 1000);
+    if (!mapRef.current) return;
+    
+    const map = mapRef.current.getMap();
+    
+    const onMapLoad = () => {
+      // Enable boundaries after a short delay to let SAFDZ load first
+      setTimeout(() => {
+        setBoundariesLoaded(true);
+        console.log('✅ Mapbox Boundaries enabled');
+      }, 500);
+    };
 
-    return () => clearTimeout(timer);
+    if (map.loaded()) {
+      onMapLoad();
+    } else {
+      map.once('load', onMapLoad);
+    }
   }, []);
 
   // Memoize expensive Mapbox expression building
@@ -577,21 +606,16 @@ export const AgriculturalMapView3D = React.memo(({
   // Add SAFDZ layers to map (when data is loaded or map style changes)
   useEffect(() => {
     const map = mapRef.current?.getMap();
-    if (!map || !safdzData) return;
-
-    let layersAdded = false;
+    if (!map || !safdzData || safdzLoading || safdzError) return;
 
     const addSafdzLayers = () => {
-      if (layersAdded) return; // Prevent duplicate additions
-
       try {
-        // Check if source already exists, if so remove everything first
-        if (map.getSource('safdz-zones')) {
-          if (map.getLayer('safdz-labels')) map.removeLayer('safdz-labels');
-          if (map.getLayer('safdz-outline')) map.removeLayer('safdz-outline');
-          if (map.getLayer('safdz-fill')) map.removeLayer('safdz-fill');
-          map.removeSource('safdz-zones');
-        }
+        // Always remove existing layers first to ensure clean state
+        if (map.getLayer('safdz-labels')) map.removeLayer('safdz-labels');
+        if (map.getLayer('safdz-outline')) map.removeLayer('safdz-outline');
+        if (map.getLayer('safdz-fill')) map.removeLayer('safdz-fill');
+        if (map.getLayer('safdz-fill-test')) map.removeLayer('safdz-fill-test');
+        if (map.getSource('safdz-zones')) map.removeSource('safdz-zones');
 
         // Add GeoJSON source
         map.addSource('safdz-zones', {
@@ -608,6 +632,7 @@ export const AgriculturalMapView3D = React.memo(({
         }
 
         // Add fill layer with hectare-based categorization and filtering
+        // Add at the top of the layer stack to ensure visibility
         map.addLayer({
           id: 'safdz-fill',
           type: 'fill',
@@ -680,27 +705,17 @@ export const AgriculturalMapView3D = React.memo(({
           }
         });
         console.log('✅ SAFDZ test layer added (hidden)');
-        console.log('💡 Debug tip: To show all SAFDZ zones without filters, run in console:');
-        console.log('   window.map.setLayoutProperty("safdz-fill-test", "visibility", "visible")');
         
         // Make map available globally for debugging
         (window as any).map = map;
         
-        // Check what features pass the filter
-        setTimeout(() => {
+        // Quick check of loaded features (no delay)
+        try {
           const allFeatures = map.querySourceFeatures('safdz-zones');
-          console.log('🔍 Total features in source:', allFeatures.length);
-          
-          const visibleFeatures = map.queryRenderedFeatures(undefined, {
-            layers: ['safdz-fill']
-          });
-          console.log('👁️ Visible SAFDZ features on screen:', visibleFeatures.length);
-          
-          if (visibleFeatures.length === 0 && allFeatures.length > 0) {
-            console.warn('⚠️ SAFDZ zones exist but none are visible! Filters may be too restrictive.');
-            console.log('💡 Try toggling the test layer to see all zones');
-          }
-        }, 1000);
+          console.log('📊 SAFDZ: Total features:', allFeatures.length);
+        } catch (error) {
+          console.error('❌ Error checking SAFDZ features:', error);
+        }
 
         // Add outline layer with matching categorization colors and filtering
         map.addLayer({
@@ -824,24 +839,17 @@ export const AgriculturalMapView3D = React.memo(({
         });
         console.log('✅ SAFDZ labels layer added');
         */
-
-        layersAdded = true;
       } catch (error) {
         console.error('Error adding SAFDZ layers:', error);
       }
     };
 
-    // Wait for map to be fully loaded or style to be loaded
-    const addLayersWhenReady = () => {
-      if (map.isStyleLoaded()) {
-        addSafdzLayers();
-      } else {
-        map.once('style.load', addSafdzLayers);
-      }
-    };
-
-    // Small delay to ensure style transition is complete
-    setTimeout(addLayersWhenReady, 100);
+    // Add layers immediately if style is loaded, otherwise wait
+    if (map.isStyleLoaded()) {
+      addSafdzLayers();
+    } else {
+      map.once('style.load', addSafdzLayers);
+    }
 
     return () => {
       // Cleanup layers when component unmounts
@@ -862,7 +870,7 @@ export const AgriculturalMapView3D = React.memo(({
   // Update SAFDZ layer visibility when toggle changes
   useEffect(() => {
     const map = mapRef.current?.getMap();
-    if (!map || !safdzData) return;
+    if (!map || !safdzData || safdzLoading || safdzError) return;
 
     const updateVisibility = () => {
       const visibility = showSafdzLayer ? 'visible' : 'none';
@@ -883,9 +891,8 @@ export const AgriculturalMapView3D = React.memo(({
       }
     };
 
-    // Small delay to ensure layers are added
-    const timer = setTimeout(updateVisibility, 100);
-    return () => clearTimeout(timer);
+    // Update visibility immediately
+    updateVisibility();
   }, [showSafdzLayer, safdzData]);
 
   // Add 3D terrain when map loads
@@ -1057,16 +1064,18 @@ export const AgriculturalMapView3D = React.memo(({
           style={{ width: '100%', height: '100%' }}
           attributionControl={false}
         >
-          {/* Mapbox Boundaries v4.5 - admin level 4 (barangays) */}
-          <Source
-            id="mapbox-boundaries"
-            type="vector"
-            url="mapbox://mapbox.enterprise-boundaries-a4-v4"
-          >
-            <Layer {...fillLayer} />
-            <Layer {...lineLayer} />
-            <Layer {...barangayLabelsLayer} />
-          </Source>
+          {/* Mapbox Boundaries - Load only when map is ready */}
+          {boundariesLoaded && (
+            <Source
+              id="mapbox-boundaries"
+              type="vector"
+              url="mapbox://mapbox.enterprise-boundaries-a4-v4"
+            >
+              <Layer {...fillLayer} />
+              <Layer {...lineLayer} />
+              <Layer {...barangayLabelsLayer} />
+            </Source>
+          )}
 
           {/* SAFDZ layers are added imperatively via useEffect - see addSafdzLayers function */}
           {/* Hazard layers are added imperatively via useEffect - see hazard layer update effect */}
@@ -1074,7 +1083,7 @@ export const AgriculturalMapView3D = React.memo(({
 
         {/* Map Legend - Compact by default, expands on hover */}
         <div
-          className="absolute bottom-4 right-4 bg-white/10 backdrop-blur-xl rounded-xl shadow-2xl border border-white/20 transition-all duration-300 ease-in-out cursor-pointer"
+          className="absolute bottom-4 right-4 bg-white/90 rounded-xl shadow-2xl border border-gray-200 transition-all duration-300 ease-in-out cursor-pointer"
           onMouseEnter={() => setIsLegendExpanded(true)}
           onMouseLeave={() => setIsLegendExpanded(false)}
         >
@@ -1319,13 +1328,13 @@ export const AgriculturalMapView3D = React.memo(({
           <div className="flex flex-col gap-2">
             <button
               onClick={() => setViewState(prev => ({ ...prev, pitch: prev.pitch > 0 ? 0 : 45 }))}
-              className="px-4 py-2.5 bg-white/95 backdrop-blur-md rounded-lg shadow-lg border border-gray-200 hover:bg-white hover:shadow-xl transition-all duration-200 text-gray-800 font-semibold text-sm"
+              className="px-3 py-2 bg-white/80 rounded-md shadow-sm border border-gray-300/50 hover:bg-white/90 transition-all duration-200 text-gray-700 font-medium text-sm"
             >
               {viewState.pitch > 0 ? '2D View' : '3D View'}
             </button>
             <button
               onClick={() => setViewState(prev => ({ ...prev, bearing: 0, pitch: 45 }))}
-              className="px-4 py-2.5 bg-white/95 backdrop-blur-md rounded-lg shadow-lg border border-gray-200 hover:bg-white hover:shadow-xl transition-all duration-200 text-gray-800 font-semibold text-sm"
+              className="px-3 py-2 bg-white/80 rounded-md shadow-sm border border-gray-300/50 hover:bg-white/90 transition-all duration-200 text-gray-700 font-medium text-sm"
             >
               Reset View
             </button>
@@ -1344,7 +1353,7 @@ export const AgriculturalMapView3D = React.memo(({
 
                 setMapStyle(newStyle);
 
-                // Restore view state and ensure terrain after style loads
+                // Restore view state, terrain, and re-add SAFDZ layers after style loads
                 const restoreView = () => {
                   try {
                     // Check if terrain source exists, add it if not
@@ -1362,13 +1371,167 @@ export const AgriculturalMapView3D = React.memo(({
                     console.warn('Terrain not available for this map style:', error);
                   }
 
+                  // Re-add SAFDZ layers immediately after style change
+                  if (safdzData) {
+                    const addSafdzLayersAfterStyleChange = () => {
+                        try {
+                          // Clean up any existing layers
+                          if (map.getLayer('safdz-labels')) map.removeLayer('safdz-labels');
+                          if (map.getLayer('safdz-outline')) map.removeLayer('safdz-outline');
+                          if (map.getLayer('safdz-fill')) map.removeLayer('safdz-fill');
+                          if (map.getLayer('safdz-fill-test')) map.removeLayer('safdz-fill-test');
+                          if (map.getSource('safdz-zones')) map.removeSource('safdz-zones');
+
+                          // Re-add source and layers
+                          map.addSource('safdz-zones', {
+                            type: 'geojson',
+                            data: safdzData
+                          });
+
+                          // Re-add fill layer with current filters
+                          map.addLayer({
+                            id: 'safdz-fill',
+                            type: 'fill',
+                            source: 'safdz-zones',
+                            filter: ['all',
+                              // Size category filter
+                              ['any',
+                                ['all', ['>=', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.large], true]],
+                                ['all', ['>=', ['get', 'HECTARES'], 50], ['<', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.medium], true]],
+                                ['all', ['>=', ['get', 'HECTARES'], 20], ['<', ['get', 'HECTARES'], 50], ['==', ['literal', currentFilters.sizeCategories.small], true]],
+                                ['all', ['<', ['get', 'HECTARES'], 20], ['==', ['literal', currentFilters.sizeCategories.micro], true]]
+                              ],
+                              // Hectare range filter
+                              ['>=', ['get', 'HECTARES'], currentFilters.minHectares],
+                              ['<=', ['get', 'HECTARES'], currentFilters.maxHectares],
+                              // LMU category filter
+                              ['any',
+                                ['all', ['==', ['get', 'LMU_CODE'], '111'], ['==', ['literal', currentFilters.lmuCategories['111']], true]],
+                                ['all', ['==', ['get', 'LMU_CODE'], '112'], ['==', ['literal', currentFilters.lmuCategories['112']], true]],
+                                ['all', ['==', ['get', 'LMU_CODE'], '113'], ['==', ['literal', currentFilters.lmuCategories['113']], true]],
+                                ['all', ['==', ['get', 'LMU_CODE'], '117'], ['==', ['literal', currentFilters.lmuCategories['117']], true]]
+                              ],
+                              // Zoning filter
+                              ['any',
+                                ['all', ['==', ['get', 'ZONING'], 'Strategic Agriculture'], ['==', ['literal', currentFilters.zoningTypes['Strategic Agriculture']], true]]
+                              ],
+                              // Land use filter
+                              ['any',
+                                ['all', ['==', ['get', 'LANDUSE'], 'Agriculture'], ['==', ['literal', currentFilters.landUseTypes['Agriculture']], true]]
+                              ],
+                              // Class filter
+                              ['any',
+                                ['all', ['==', ['get', 'CLASS'], 'rural'], ['==', ['literal', currentFilters.classTypes['rural']], true]]
+                              ],
+                              // Barangay filter (if any selected)
+                              currentFilters.selectedBarangays && currentFilters.selectedBarangays.length > 0
+                                ? ['in', ['get', 'BRGY'], ['literal', currentFilters.selectedBarangays]]
+                                : ['literal', true],
+                              // Search filter
+                              currentFilters.searchBarangay
+                                ? ['in', currentFilters.searchBarangay.toLowerCase(), ['downcase', ['get', 'BRGY']]]
+                                : ['literal', true]
+                            ],
+                            paint: {
+                              'fill-color': [
+                                'case',
+                                ['==', ['get', 'LMU_CODE'], '111'], '#22c55e', // Prime Agricultural Land - Green
+                                ['==', ['get', 'LMU_CODE'], '112'], '#eab308', // Good Agricultural Land - Yellow
+                                ['==', ['get', 'LMU_CODE'], '113'], '#f97316', // Fair Agricultural Land - Orange
+                                ['==', ['get', 'LMU_CODE'], '117'], '#ef4444', // Marginal Agricultural Land - Red
+                                '#94a3b8'                                       // Default - Gray for unknown
+                              ],
+                              'fill-opacity': 0.5,
+                              'fill-antialias': false // Pixelated edges for consistency
+                            }
+                          });
+
+                          // Re-add outline layer
+                          map.addLayer({
+                            id: 'safdz-outline',
+                            type: 'line',
+                            source: 'safdz-zones',
+                            filter: ['all',
+                              // Size category filter (same as fill layer)
+                              ['any',
+                                ['all', ['>=', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.large], true]],
+                                ['all', ['>=', ['get', 'HECTARES'], 50], ['<', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.medium], true]],
+                                ['all', ['>=', ['get', 'HECTARES'], 20], ['<', ['get', 'HECTARES'], 50], ['==', ['literal', currentFilters.sizeCategories.small], true]],
+                                ['all', ['<', ['get', 'HECTARES'], 20], ['==', ['literal', currentFilters.sizeCategories.micro], true]]
+                              ],
+                              // Hectare range filter
+                              ['>=', ['get', 'HECTARES'], currentFilters.minHectares],
+                              ['<=', ['get', 'HECTARES'], currentFilters.maxHectares],
+                              // LMU category filter
+                              ['any',
+                                ['all', ['==', ['get', 'LMU_CODE'], '111'], ['==', ['literal', currentFilters.lmuCategories['111']], true]],
+                                ['all', ['==', ['get', 'LMU_CODE'], '112'], ['==', ['literal', currentFilters.lmuCategories['112']], true]],
+                                ['all', ['==', ['get', 'LMU_CODE'], '113'], ['==', ['literal', currentFilters.lmuCategories['113']], true]],
+                                ['all', ['==', ['get', 'LMU_CODE'], '117'], ['==', ['literal', currentFilters.lmuCategories['117']], true]]
+                              ],
+                              // Zoning filter
+                              ['any',
+                                ['all', ['==', ['get', 'ZONING'], 'Strategic Agriculture'], ['==', ['literal', currentFilters.zoningTypes['Strategic Agriculture']], true]]
+                              ],
+                              // Land use filter
+                              ['any',
+                                ['all', ['==', ['get', 'LANDUSE'], 'Agriculture'], ['==', ['literal', currentFilters.landUseTypes['Agriculture']], true]]
+                              ],
+                              // Class filter
+                              ['any',
+                                ['all', ['==', ['get', 'CLASS'], 'rural'], ['==', ['literal', currentFilters.classTypes['rural']], true]]
+                              ],
+                              // Barangay filter (if any selected)
+                              currentFilters.selectedBarangays && currentFilters.selectedBarangays.length > 0
+                                ? ['in', ['get', 'BRGY'], ['literal', currentFilters.selectedBarangays]]
+                                : ['literal', true],
+                              // Search filter
+                              currentFilters.searchBarangay
+                                ? ['in', currentFilters.searchBarangay.toLowerCase(), ['downcase', ['get', 'BRGY']]]
+                                : ['literal', true]
+                            ],
+                            paint: {
+                              'line-color': [
+                                'case',
+                                ['==', ['get', 'LMU_CODE'], '111'], '#16a34a', // Prime Agricultural Land - Dark Green
+                                ['==', ['get', 'LMU_CODE'], '112'], '#ca8a04', // Good Agricultural Land - Dark Yellow
+                                ['==', ['get', 'LMU_CODE'], '113'], '#ea580c', // Fair Agricultural Land - Dark Orange
+                                ['==', ['get', 'LMU_CODE'], '117'], '#dc2626', // Marginal Agricultural Land - Dark Red
+                                '#64748b'                                       // Default - Dark Gray for unknown
+                              ],
+                              'line-width': 1.5,
+                              'line-opacity': 0.8
+                            }
+                          });
+
+                          // Update visibility based on current state
+                          const visibility = showSafdzLayer ? 'visible' : 'none';
+                          if (map.getLayer('safdz-fill')) {
+                            map.setLayoutProperty('safdz-fill', 'visibility', visibility);
+                          }
+                          if (map.getLayer('safdz-outline')) {
+                            map.setLayoutProperty('safdz-outline', 'visibility', visibility);
+                          }
+
+                        } catch (error) {
+                          console.error('Error re-adding SAFDZ layers after style change:', error);
+                        }
+                      };
+
+                    if (map.isStyleLoaded()) {
+                      addSafdzLayersAfterStyleChange();
+                    } else {
+                      map.once('style.load', addSafdzLayersAfterStyleChange);
+                    }
+                  }
+
                   setViewState(currentViewState);
                   map.off('style.load', restoreView);
                 };
 
                 map.once('style.load', restoreView);
               }}
-              className="px-4 py-2.5 bg-white/95 backdrop-blur-md rounded-lg shadow-lg border border-gray-200 hover:bg-white hover:shadow-xl transition-all duration-200 text-gray-800 font-semibold text-sm"
+              className="px-3 py-2 bg-white/80 rounded-md shadow-sm border border-gray-300/50 hover:bg-white/90 transition-all duration-200 text-gray-700 font-medium text-sm"
             >
               {mapStyle === 'mapbox://styles/mapbox/satellite-v9' ? 'Streets' : 'Satellite'}
             </button>
@@ -1376,10 +1539,14 @@ export const AgriculturalMapView3D = React.memo(({
           
           
           {/* Zone Counter */}
-          {safdzData && (
-            <div className="px-4 py-2.5 bg-gray-800/95 backdrop-blur-md rounded-lg shadow-lg border border-gray-700 text-white text-sm font-medium text-center">
-              <div className="text-xs text-gray-300 mb-0.5">Total Zones</div>
-              <div className="text-lg font-bold">{safdzData.features.length}</div>
+          {(safdzLoading || safdzError || safdzData) && (
+            <div className="px-3 py-2 bg-gray-800/70 rounded-md shadow-sm border border-gray-600/50 text-white text-sm font-normal text-center">
+              <div className="text-xs text-gray-300 mb-0.5">
+                {safdzLoading ? 'Loading Zones...' : safdzError ? 'Error' : 'Total Zones'}
+              </div>
+              <div className="text-lg font-bold">
+                {safdzLoading ? '...' : safdzError ? '!' : safdzData.features.length}
+              </div>
             </div>
           )}
         </div>

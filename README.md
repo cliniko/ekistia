@@ -109,16 +109,34 @@ Ekistia is a comprehensive web-based platform that combines advanced agricultura
 ## 🔧 Configuration
 
 ### **Environment Variables**
+Create a `.env` file in the root directory:
 ```env
 VITE_MAPBOX_TOKEN=your_mapbox_token_here
 VITE_SUPABASE_URL=your_supabase_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
+**Getting Your Credentials:**
+- **Mapbox Token**: https://account.mapbox.com/access-tokens/
+- **Supabase URL & Key**: https://app.supabase.com/project/_/settings/api
+
 ### **Map Data Sources**
 - **Hazard Data**: Official Iligan City GIS datasets
 - **Agricultural Data**: Crop suitability analysis and barangay statistics
 - **SAFDZ Zones**: Strategic Agriculture and Fisheries Development Zones
+
+## 🚀 Deployment
+
+### Deploying to Vercel
+
+1. **Connect your repository to Vercel**
+2. **Add environment variables in Vercel Dashboard**:
+   - Go to Settings → Environment Variables
+   - Add `VITE_MAPBOX_TOKEN`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+   - Set for all environments (Production, Preview, Development)
+3. **Deploy**: Vercel will automatically build and deploy
+
+📚 **Detailed deployment guide**: See [DEPLOYMENT.md](./DEPLOYMENT.md)
 
 ## 🤝 Contributing
 

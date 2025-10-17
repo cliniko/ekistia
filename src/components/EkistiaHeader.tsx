@@ -43,9 +43,9 @@ export const EkistiaHeader = ({
   // Calculate header width based on open panels
   const getHeaderStyle = () => {
     if (showMapAnalytics || showCollectPanel || showHazardsPanel) {
-      return 'fixed top-4 left-4 right-[400px] z-40 rounded-xl bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl';
+      return 'fixed top-4 left-4 right-[400px] z-40 rounded-xl bg-white/90 border border-gray-200 shadow-2xl';
     }
-    return 'fixed top-4 left-1/2 transform -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-7xl mx-auto rounded-xl bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl';
+    return 'fixed top-4 left-1/2 transform -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-7xl mx-auto rounded-xl bg-white/90 border border-gray-200 shadow-2xl';
   };
 
   return (
@@ -68,14 +68,14 @@ export const EkistiaHeader = ({
 
         {/* Center: SAFDZ Filters & Navigation */}
         <div className="hidden md:flex items-center gap-3">
-          {/* SAFDZ Filter Dropdown */}
-          {safdzFilters && (
+          {/* SAFDZ Filter Dropdown - Hide when side panels are open */}
+          {safdzFilters && !(showMapAnalytics || showCollectPanel || showHazardsPanel) && (
             <div className="relative">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={toggleSafdzFilters}
-                className="gap-2 bg-white/5 border-white/15 hover:bg-white/15 hover:border-white/25"
+                className="gap-2 bg-white/10 border-gray-300 hover:bg-gray-50"
               >
                 <Filter className="w-4 h-4" />
                 Filters
@@ -83,7 +83,7 @@ export const EkistiaHeader = ({
               </Button>
 
               {showSafdzFilters && (
-                <div className="absolute top-full mt-1 w-96 bg-white/95 backdrop-blur-xl border border-white/20 rounded-lg shadow-2xl p-4 z-50">
+                <div className="absolute top-full mt-8 w-96 bg-white border border-gray-200 rounded-lg shadow-2xl p-4 z-50">
                   {/* Agricultural Suitability */}
                   <div className="mb-4">
                     <div className="text-sm font-medium text-foreground mb-2">Agricultural Suitability:</div>
@@ -246,7 +246,7 @@ export const EkistiaHeader = ({
               variant={showMapAnalytics ? 'default' : 'ghost'}
               size="sm"
               onClick={toggleMapAnalytics}
-              className={`gap-2 ${showMapAnalytics ? '' : 'bg-white/5 border-white/15 hover:bg-white/15 hover:border-white/25'}`}
+              className={`gap-2 ${showMapAnalytics ? '' : 'bg-gray-100 border-gray-300 hover:bg-gray-200'}`}
             >
               <TrendingUp className="w-4 h-4" />
               Analytics
@@ -258,7 +258,7 @@ export const EkistiaHeader = ({
               variant={showHazardsPanel ? 'default' : 'ghost'}
               size="sm"
               onClick={toggleHazardsPanel}
-              className={`gap-2 ${showHazardsPanel ? '' : 'bg-white/5 border-white/15 hover:bg-white/15 hover:border-white/25'}`}
+              className={`gap-2 ${showHazardsPanel ? '' : 'bg-gray-100 border-gray-300 hover:bg-gray-200'}`}
             >
               <AlertTriangle className="w-4 h-4" />
               Hazards
@@ -270,7 +270,7 @@ export const EkistiaHeader = ({
               variant="ghost"
               size="sm"
               onClick={onCollectClick}
-              className="gap-2 bg-white/5 border-white/15 hover:bg-white/15 hover:border-white/25"
+              className="gap-2 bg-gray-100 border-gray-300 hover:bg-gray-200"
             >
               <Upload className="w-4 h-4" />
               Collect
