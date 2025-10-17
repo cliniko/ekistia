@@ -83,7 +83,7 @@ export const EkistiaHeader = ({
               </Button>
 
               {showSafdzFilters && (
-                <div className="absolute top-full mt-2 w-96 bg-white/95 backdrop-blur-xl border border-white/20 rounded-lg shadow-2xl p-4 z-50">
+                <div className="absolute top-full mt-1 w-96 bg-white/95 backdrop-blur-xl border border-white/20 rounded-lg shadow-2xl p-4 z-50">
                   {/* Agricultural Suitability */}
                   <div className="mb-4">
                     <div className="text-sm font-medium text-foreground mb-2">Agricultural Suitability:</div>

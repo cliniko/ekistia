@@ -1,7 +1,9 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "ekistia",
+  "description": "Agricultural Intelligence Platform for Iligan City - Advanced 3D mapping with hazard analysis and crop suitability visualization",
+  "version": "1.0.0",
+  "author": "Ekistia Team",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

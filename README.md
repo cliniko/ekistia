@@ -1,57 +1,160 @@
-# Eyeway 2.0
+# Ekistia 🌾
 
-## Pothole Management System
+## Agricultural Intelligence Platform for Iligan City
 
-Eyeway 2.0 is a web-based application designed to monitor, track, and manage potholes in Iligan City, Philippines. The system allows users to visualize pothole locations on an interactive map with severity-based classification.
+Ekistia is a comprehensive web-based platform that combines advanced agricultural data visualization, hazard risk analysis, and land management tools to support sustainable farming and urban planning in Iligan City, Philippines.
 
-## Features
+## 🌟 Key Features
 
-- **Interactive Map**: Displays pothole locations throughout Iligan City using OpenStreetMap
-- **Severity Classification**: Potholes are categorized into four severity levels:
-  - Low (Green)
-  - Medium (Yellow)
-  - High (Orange)
-  - Critical (Red)
-- **Filtering Capabilities**: Filter potholes by:
-  - Severity level
-  - Status
-- **Zoom Controls**: Easily zoom in/out to focus on specific areas
-- **Real-time Updates**: Shows current status of reported potholes
+### 🗺️ **3D Agricultural Mapping**
+- **Interactive 3D Terrain**: Powered by Mapbox GL with elevation data
+- **Crop Suitability Analysis**: Visualize optimal planting areas for rice, corn, coconut, and vegetables
+- **Barangay-Level Analytics**: Detailed agricultural data for all 44 barangays in Iligan City
 
-## Technical Implementation
+### ⚠️ **Comprehensive Hazard Analysis**
+- **Flood Risk Mapping**: Multi-level flood susceptibility zones
+- **Landslide Risk Assessment**: Terrain stability analysis with risk classifications
+- **Slope Analysis**: 6-level slope categorization for land management
+- **Land Use Classification**: Agricultural, forest, urban, and industrial zoning
+- **Ancestral Domain Protection**: Indigenous land rights visualization
 
-- Built using web technologies (HTML, CSS, JavaScript)
-- Utilizes Leaflet.js for map rendering
-- Integrates with OpenStreetMap for map data
-- Responsive design for various device compatibility
+### 🛰️ **Advanced Map Controls**
+- **Satellite/Streets Toggle**: Switch between satellite imagery and street maps
+- **3D Terrain Preservation**: Maintains 3D view when switching map styles
+- **SAFDZ Integration**: Strategic Agriculture and Fisheries Development Zones
+- **Real-time Filtering**: Dynamic hazard layer controls with opacity adjustment
 
-## Installation
+### 📊 **Analytics Dashboard**
+- **Agricultural Statistics**: Land availability, active demands, crop distribution
+- **Priority Zone Analysis**: LGU-identified development areas
+- **Matched Area Visualization**: Areas meeting farmer supply + business demand + LGU priorities
+- **Interactive Legends**: Comprehensive hazard and agricultural data interpretation
 
-1. Clone the repository
-2. Install dependencies using `npm install`
-3. Configure your environment variables
-4. Run the application using `npm start`
+## 🛠️ Technical Architecture
 
-## Usage
+### **Frontend Stack**
+- **React 18** with TypeScript for type-safe development
+- **Mapbox GL JS** for advanced 3D mapping and terrain visualization
+- **Tailwind CSS** with Radix UI components for modern, responsive design
+- **React Router** for client-side navigation
+- **Supabase** for backend data management
 
-1. Access the web interface
-2. Use the filter options to display potholes based on severity or status
-3. Click on pothole markers for detailed information
-4. Use the zoom controls to navigate the map
+### **Mapping Capabilities**
+- **Multi-layer GeoJSON Integration**: Hazard data, barangay boundaries, SAFDZ zones
+- **Real-time Layer Management**: Toggle hazard layers with smooth transitions
+- **Interactive Popups**: Detailed information on hover/click for all map features
+- **Responsive Design**: Optimized for desktop and mobile devices
 
-## Contributing
+### **Data Processing**
+- **Shapefile Conversion**: Automated processing of GIS data into web-compatible formats
+- **GeoJSON Optimization**: Efficient rendering of large spatial datasets
+- **Real-time Filtering**: Client-side processing for instant map updates
 
-Contributions are welcome! Please follow these steps:
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request with your changes
+## 🚀 Getting Started
 
-## License
+### Prerequisites
+- Node.js 18+ and npm
+- Mapbox access token (for map rendering)
+- Supabase account (for data storage)
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+### Installation
 
-## Acknowledgments
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/cliniko/ekistia.git
+   cd ekistia
+   ```
 
-- OpenStreetMap contributors for map data
-- City of Iligan for collaboration and data
-- All contributors and testers of the application
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Configure environment variables**
+   ```bash
+   cp .env.example .env
+   # Add your Mapbox token and Supabase credentials
+   ```
+
+4. **Start the development server**
+   ```bash
+   npm run dev
+   ```
+
+5. **Build for production**
+   ```bash
+   npm run build
+   npm run preview
+   ```
+
+## 📱 Usage Guide
+
+### **Map Navigation**
+- **Zoom**: Mouse wheel or zoom controls
+- **Pan**: Click and drag to navigate
+- **3D View**: Use the 3D button or right-click + drag to rotate
+- **Satellite Mode**: Toggle between streets and satellite views
+
+### **Hazard Analysis**
+- **Layer Controls**: Access hazard layers from the top-right panel
+- **Risk Categories**: View flood, landslide, slope, and land use classifications
+- **Opacity Control**: Adjust layer transparency for better visualization
+- **Interactive Popups**: Click on map features for detailed information
+
+### **Agricultural Planning**
+- **Crop Selection**: Choose specific crops to view suitability analysis
+- **Barangay Details**: Click on barangays for comprehensive agricultural data
+- **Analytics Dashboard**: View city-wide agricultural statistics and trends
+
+## 🔧 Configuration
+
+### **Environment Variables**
+```env
+VITE_MAPBOX_TOKEN=your_mapbox_token_here
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+### **Map Data Sources**
+- **Hazard Data**: Official Iligan City GIS datasets
+- **Agricultural Data**: Crop suitability analysis and barangay statistics
+- **SAFDZ Zones**: Strategic Agriculture and Fisheries Development Zones
+
+## 🤝 Contributing
+
+We welcome contributions to improve Ekistia's agricultural intelligence capabilities!
+
+1. **Fork the repository**
+2. **Create a feature branch**: `git checkout -b feature/your-feature-name`
+3. **Make your changes** and test thoroughly
+4. **Submit a pull request** with detailed description
+
+### **Development Guidelines**
+- Use TypeScript for type safety
+- Follow React best practices and hooks
+- Test map functionality across different devices
+- Maintain responsive design principles
+- Document new features and API changes
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **City of Iligan LGU** for providing hazard and agricultural data
+- **Mapbox** for powerful mapping platform and terrain data
+- **OpenStreetMap contributors** for base map data
+- **Supabase** for reliable backend infrastructure
+- **React & TypeScript communities** for excellent development tools
+
+## 📞 Contact
+
+For questions, collaboration opportunities, or data partnerships:
+- **Email**: info@ekistia.com
+- **GitHub**: [cliniko/ekistia](https://github.com/cliniko/ekistia)
+- **Website**: [ekistia.com](https://ekistia.com)
+
+---
+
+**Ekistia** - Transforming agricultural planning with data-driven intelligence for sustainable development in Iligan City. 🌱📍🇵🇭
