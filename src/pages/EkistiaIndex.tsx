@@ -9,6 +9,7 @@ import HazardPanel from '@/components/HazardPanel';
 import type { HazardLayerConfig } from '@/components/AgriculturalHazardLayerControl';
 import { barangayData } from '@/data/barangayData';
 import { Barangay, CropType } from '@/types/agricultural';
+import { getSafdzData, getSafdzDataSync, isSafdzDataLoaded } from '@/services/safdzDataService';
 
 const EkistiaIndex = React.memo(() => {
   const [barangays] = useState<Barangay[]>(barangayData);
@@ -44,7 +45,7 @@ const EkistiaIndex = React.memo(() => {
     }
   });
   const [showSafdzFilters, setShowSafdzFilters] = useState(false);
-  const [safdzData, setSafdzData] = useState<{ features: any[] } | null>(null);
+  const [safdzData, setSafdzData] = useState<{ features: any[] } | null>(getSafdzDataSync());
   const [showMapAnalytics, setShowMapAnalytics] = useState(false);
   const [showHazardsPanel, setShowHazardsPanel] = useState(false);
   const [showCollectPanel, setShowCollectPanel] = useState(false);
@@ -53,15 +54,23 @@ const EkistiaIndex = React.memo(() => {
   const [hazardLayers, setHazardLayers] = useState<HazardLayerConfig[]>([]);
   const [globalHazardOpacity, setGlobalHazardOpacity] = useState(0.5);
 
-  // Load SAFDZ data
+  // Load SAFDZ data using the pre-loader service
   useEffect(() => {
-    fetch('/safdz_agri_barangays.geojson')
-      .then(response => response.json())
+    // Check if data is already loaded synchronously
+    if (isSafdzDataLoaded()) {
+      const data = getSafdzDataSync();
+      setSafdzData(data);
+      return;
+    }
+
+    // Otherwise, wait for it to load
+    getSafdzData()
       .then(data => {
         setSafdzData(data);
-        console.log('✅ SAFDZ data loaded for header:', data.features.length, 'features');
       })
-      .catch(error => console.error('Error loading SAFDZ data for header:', error));
+      .catch(error => {
+        console.error('❌ Failed to load SAFDZ data:', error);
+      });
   }, []);
 
   // Memoize summary statistics
@@ -115,6 +124,9 @@ const EkistiaIndex = React.memo(() => {
   }, []);
 
 
+  // No longer blocking render while waiting for SAFDZ data
+  // The map component will handle the loading state gracefully
+
   return (
     <div className="min-h-screen relative">
       {/* Fullscreen Agricultural Map */}
@@ -123,6 +135,7 @@ const EkistiaIndex = React.memo(() => {
         selectedCrop={selectedCrop}
         onSelectBarangay={handleSelectBarangay}
         currentFilters={safdzFilters}
+        safdzData={safdzData}
         hazardLayers={hazardLayers}
         onHazardLayersChange={setHazardLayers}
         globalHazardOpacity={globalHazardOpacity}

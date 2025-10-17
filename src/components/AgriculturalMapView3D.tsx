@@ -2,6 +2,18 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import Map, { Source, Layer, MapRef } from 'react-map-gl';
 import type { LayerProps, FillLayer } from 'react-map-gl';
 import { Barangay, CropType, SuitabilityLevel } from '@/types/agricultural';
+
+// Disable Mapbox telemetry globally
+if (typeof window !== 'undefined') {
+  // @ts-ignore - Mapbox GL JS global config
+  window.mapboxgl = window.mapboxgl || {};
+  // @ts-ignore
+  window.mapboxgl.config = {
+    ...window.mapboxgl.config,
+    TELEMETRY: false,
+    PERFORMANCE_METRICS: false
+  };
+}
 import type { HazardLayerConfig } from './AgriculturalHazardLayerControl';
 import {
   initializeHazardLayers,
@@ -33,6 +45,8 @@ interface AgriculturalMapView3DProps {
     landUseTypes: { [key: string]: boolean };
     classTypes: { [key: string]: boolean };
   };
+  // SAFDZ data prop (to avoid duplicate loading)
+  safdzData?: { features: any[] } | null;
   // Hazard layers props (external control)
   hazardLayers?: HazardLayerConfig[];
   onHazardLayersChange?: (layers: HazardLayerConfig[]) => void;
@@ -57,6 +71,7 @@ export const AgriculturalMapView3D = React.memo(({
   selectedCrop,
   onSelectBarangay,
   currentFilters: externalSafdzFilters,
+  safdzData: externalSafdzData,
   hazardLayers: externalHazardLayers,
   onHazardLayersChange,
   globalHazardOpacity: externalGlobalOpacity
@@ -69,6 +84,8 @@ export const AgriculturalMapView3D = React.memo(({
   const [safdzError, setSafdzError] = useState<string | null>(null);
   const [showSafdzLayer, setShowSafdzLayer] = useState(true);
   const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/streets-v12');
+  const [load3DFeatures, setLoad3DFeatures] = useState(false); // Defer 3D loading
+  const [safdzLayersReady, setSafdzLayersReady] = useState(false); // Track SAFDZ layer rendering
 
   // Hazard layers state - use external if provided, otherwise internal
   const [internalHazardLayers, setInternalHazardLayers] = useState<HazardLayerConfig[]>([]);
@@ -211,37 +228,28 @@ export const AgriculturalMapView3D = React.memo(({
       : { level: 'not-suitable', area: 0 };
   }, []);
 
-  // Load SAFDZ GeoJSON data with caching
+  // Load SAFDZ GeoJSON data from parent or cache
   useEffect(() => {
-    // If data is already cached, use it immediately
+    // Parent component now loads data first, so externalSafdzData should be available
+    if (externalSafdzData) {
+      setSafdzData(externalSafdzData);
+      setSafdzLoading(false);
+      safdzDataCache = externalSafdzData; // Update cache with external data
+      return;
+    }
+
+    // Fallback: If data is already cached, use it
     if (safdzDataCache) {
       setSafdzData(safdzDataCache);
       setSafdzLoading(false);
-      console.log('✅ SAFDZ data loaded from cache:', safdzDataCache.features.length, 'features');
       return;
     }
 
-    // If a fetch is already in progress, wait for it
-    if (safdzDataPromise) {
-      setSafdzLoading(true);
-      safdzDataPromise
-        .then(data => {
-          setSafdzData(data);
-          setSafdzLoading(false);
-        })
-        .catch(error => {
-          setSafdzError(error.message || 'Failed to load SAFDZ data');
-          setSafdzLoading(false);
-        });
-      return;
-    }
-
-    console.log('🔄 Loading SAFDZ Agricultural Barangays data...');
+    // Emergency fallback: Load independently if parent failed
     setSafdzLoading(true);
     setSafdzError(null);
 
-    // Create and cache the promise
-    safdzDataPromise = fetch('/safdz_agri_barangays.geojson')
+    fetch('/safdz_agri_barangays.geojson')
       .then(response => {
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -255,49 +263,50 @@ export const AgriculturalMapView3D = React.memo(({
 
         // Cache the data
         safdzDataCache = data;
-
         setSafdzData(data);
         setSafdzLoading(false);
-        console.log('✅ SAFDZ Agricultural Barangays loaded:', data.features.length, 'features');
-        return data;
       })
       .catch(error => {
-        console.error('❌ Error loading SAFDZ data:', error);
+        console.error('❌ Failed to load SAFDZ data:', error);
         setSafdzError(error.message || 'Failed to load SAFDZ data');
         setSafdzLoading(false);
-        safdzDataPromise = null; // Reset promise on error
-        throw error;
       });
-  }, []);
+  }, [externalSafdzData]);
 
-  // Load hazard layers data
+  // Load hazard layers data in parallel for better performance
   useEffect(() => {
     const loadHazardLayers = async () => {
       try {
         setHazardLayersLoading(true);
-        console.log('🔄 Loading hazard layers...');
-        
+
         const layers = await initializeHazardLayers();
         setHazardLayers(layers);
-        
-        console.log('✅ Hazard layers initialized:', layers.length);
-        
-        // Load all hazard data
-        const hazardData: Record<string, any> = {};
-        for (const layer of layers) {
+
+        // Load all hazard data in parallel instead of sequentially
+        const hazardDataPromises = layers.map(async (layer) => {
           try {
             const data = await loadHazardData(layer.id as any);
-            hazardData[layer.id] = data;
-            console.log(`✅ Loaded ${layer.id}: ${data.features.length} features`);
+            return { id: layer.id, data };
           } catch (error) {
             console.error(`❌ Failed to load ${layer.id}:`, error);
+            return { id: layer.id, data: null };
           }
-        }
-        
+        });
+
+        // Wait for all hazard data to load in parallel
+        const results = await Promise.all(hazardDataPromises);
+
+        // Convert results to hazardData object
+        const hazardData: Record<string, any> = {};
+        results.forEach(result => {
+          if (result.data) {
+            hazardData[result.id] = result.data;
+          }
+        });
+
         setHazardDataLoaded(hazardData);
-        console.log('✅ All hazard data loaded successfully');
       } catch (error) {
-        console.error('Error loading hazard layers:', error);
+        console.error('❌ Failed to load hazard layers:', error);
       } finally {
         setHazardLayersLoading(false);
       }
@@ -420,65 +429,64 @@ export const AgriculturalMapView3D = React.memo(({
           },
           ...(filter && { filter })
         });
-
-        console.log(`✅ Added ${hazardType} hazard layer to map`);
       }
     });
   }, [hazardLayers, hazardDataLoaded]);
 
   // Update SAFDZ filters when they change
   useEffect(() => {
-    if (!mapRef.current || !safdzData || safdzLoading || safdzError) return;
-
-    const map = mapRef.current.getMap();
-
-    // Update filters for all SAFDZ layers (labels disabled)
-    const layers = ['safdz-fill', 'safdz-outline'];
-    layers.forEach(layerId => {
-      if (map.getLayer(layerId)) {
-        map.setFilter(layerId, ['all',
-          // Size category filter
-          ['any',
-            ['all', ['>=', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.large], true]],
-            ['all', ['>=', ['get', 'HECTARES'], 50], ['<', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.medium], true]],
-            ['all', ['>=', ['get', 'HECTARES'], 20], ['<', ['get', 'HECTARES'], 50], ['==', ['literal', currentFilters.sizeCategories.small], true]],
-            ['all', ['<', ['get', 'HECTARES'], 20], ['==', ['literal', currentFilters.sizeCategories.micro], true]]
-          ],
-          // Hectare range filter
-          ['>=', ['get', 'HECTARES'], currentFilters.minHectares],
-          ['<=', ['get', 'HECTARES'], currentFilters.maxHectares],
-          // LMU category filter
-          ['any',
-            ['all', ['==', ['get', 'LMU_CODE'], '111'], ['==', ['literal', currentFilters.lmuCategories['111']], true]],
-            ['all', ['==', ['get', 'LMU_CODE'], '112'], ['==', ['literal', currentFilters.lmuCategories['112']], true]],
-            ['all', ['==', ['get', 'LMU_CODE'], '113'], ['==', ['literal', currentFilters.lmuCategories['113']], true]],
-            ['all', ['==', ['get', 'LMU_CODE'], '117'], ['==', ['literal', currentFilters.lmuCategories['117']], true]]
-          ],
-          // Zoning filter
-          ['any',
-            ['all', ['==', ['get', 'ZONING'], 'Strategic Agriculture'], ['==', ['literal', currentFilters.zoningTypes['Strategic Agriculture']], true]]
-          ],
-          // Land use filter
-          ['any',
-            ['all', ['==', ['get', 'LANDUSE'], 'Agriculture'], ['==', ['literal', currentFilters.landUseTypes['Agriculture']], true]]
-          ],
-          // Class filter
-          ['any',
-            ['all', ['==', ['get', 'CLASS'], 'rural'], ['==', ['literal', currentFilters.classTypes['rural']], true]]
-          ],
-          // Barangay filter (if any selected)
-          currentFilters.selectedBarangays.length > 0
-            ? ['in', ['get', 'BRGY'], ['literal', currentFilters.selectedBarangays]]
-            : ['literal', true],
-          // Search filter
-          currentFilters.searchBarangay
-            ? ['in', currentFilters.searchBarangay.toLowerCase(), ['downcase', ['get', 'BRGY']]]
-            : ['literal', true]
-        ]);
-      }
-    });
-
-    console.log('✅ SAFDZ filters updated:', currentFilters);
+    // Temporarily disabled for testing basic layer visibility
+    // if (!mapRef.current || !safdzData || safdzLoading || safdzError) return;
+    //
+    // const map = mapRef.current.getMap();
+    //
+    // // Update filters for all SAFDZ layers (labels disabled)
+    // const layers = ['safdz-fill', 'safdz-outline'];
+    // layers.forEach(layerId => {
+    //   if (map.getLayer(layerId)) {
+    //     map.setFilter(layerId, ['all',
+    //       // Size category filter
+    //       ['any',
+    //         ['all', ['>=', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.large], true]],
+    //         ['all', ['>=', ['get', 'HECTARES'], 50], ['<', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.medium], true]],
+    //         ['all', ['>=', ['get', 'HECTARES'], 20], ['<', ['get', 'HECTARES'], 50], ['==', ['literal', currentFilters.sizeCategories.small], true]],
+    //         ['all', ['<', ['get', 'HECTARES'], 20], ['==', ['literal', currentFilters.sizeCategories.micro], true]]
+    //       ],
+    //       // Hectare range filter
+    //       ['>=', ['get', 'HECTARES'], currentFilters.minHectares],
+    //       ['<=', ['get', 'HECTARES'], currentFilters.maxHectares],
+    //       // LMU category filter
+    //       ['any',
+    //         ['all', ['==', ['get', 'LMU_CODE'], '111'], ['==', ['literal', currentFilters.lmuCategories['111']], true]],
+    //         ['all', ['==', ['get', 'LMU_CODE'], '112'], ['==', ['literal', currentFilters.lmuCategories['112']], true]],
+    //         ['all', ['==', ['get', 'LMU_CODE'], '113'], ['==', ['literal', currentFilters.lmuCategories['113']], true]],
+    //         ['all', ['==', ['get', 'LMU_CODE'], '117'], ['==', ['literal', currentFilters.lmuCategories['117']], true]]
+    //       ],
+    //       // Zoning filter
+    //       ['any',
+    //         ['all', ['==', ['get', 'ZONING'], 'Strategic Agriculture'], ['==', ['literal', currentFilters.zoningTypes['Strategic Agriculture']], true]]
+    //       ],
+    //       // Land use filter
+    //       ['any',
+    //         ['all', ['==', ['get', 'LANDUSE'], 'Agriculture'], ['==', ['literal', currentFilters.landUseTypes['Agriculture']], true]]
+    //       ],
+    //       // Class filter
+    //       ['any',
+    //         ['all', ['==', ['get', 'CLASS'], 'rural'], ['==', ['literal', currentFilters.classTypes['rural']], true]]
+    //       ],
+    //       // Barangay filter (if any selected)
+    //       currentFilters.selectedBarangays.length > 0
+    //         ? ['in', ['get', 'BRGY'], ['literal', currentFilters.selectedBarangays]]
+    //         : ['literal', true],
+    //       // Search filter
+    //       currentFilters.searchBarangay
+    //         ? ['in', currentFilters.searchBarangay.toLowerCase(), ['downcase', ['get', 'BRGY']]]
+    //         : ['literal', true]
+    //     ]);
+    //   }
+    // });
+    //
+    // console.log('✅ SAFDZ filters updated:', currentFilters);
   }, [currentFilters, safdzData, externalSafdzFilters]);
 
   // Mapbox Boundaries are loaded after map is ready
@@ -491,7 +499,6 @@ export const AgriculturalMapView3D = React.memo(({
       // Enable boundaries after a short delay to let SAFDZ load first
       setTimeout(() => {
         setBoundariesLoaded(true);
-        console.log('✅ Mapbox Boundaries enabled');
       }, 500);
     };
 
@@ -542,63 +549,56 @@ export const AgriculturalMapView3D = React.memo(({
   const handleMapClick = useCallback((event: any) => {
     if (!mapRef.current) return;
 
-    // Check for SAFDZ layer first
-    const safdzFeatures = mapRef.current.queryRenderedFeatures(event.point, {
-      layers: ['safdz-fill']
-    });
+    const map = mapRef.current.getMap();
 
-    if (safdzFeatures && safdzFeatures.length > 0 && showSafdzLayer) {
-      const feature = safdzFeatures[0];
-      const props = feature.properties;
-
-      // Determine category based on hectares
-      const hectares = props?.HECTARES || 0;
-      let category = '';
-      if (hectares >= 100) category = 'Large (>100 ha)';
-      else if (hectares >= 50) category = 'Medium (50-100 ha)';
-      else if (hectares >= 20) category = 'Small (20-50 ha)';
-      else category = 'Micro (<20 ha)';
-
-      // Determine LMU category meaning
-      const lmuCode = props?.LMU_CODE;
-      let lmuDescription = '';
-      switch (lmuCode) {
-        case '111': lmuDescription = 'Prime Agricultural Land'; break;
-        case '112': lmuDescription = 'Good Agricultural Land'; break;
-        case '113': lmuDescription = 'Fair Agricultural Land'; break;
-        case '117': lmuDescription = 'Marginal Agricultural Land'; break;
-        default: lmuDescription = 'Unknown'; break;
-      }
-
-      // Show popup with SAFDZ information
-      console.log('SAFDZ Zone clicked:', {
-        barangay: props?.BRGY,
-        zoning: props?.ZONING,
-        landuse: props?.LANDUSE,
-        hectares: props?.HECTARES,
-        sizeCategory: category,
-        lmuCode: lmuCode,
-        lmuDescription: lmuDescription,
-        class: props?.CLASS,
-        npaaad: props?.NPAAAD
+    // Check for SAFDZ layer first (only if layer exists)
+    if (map.getLayer('safdz-fill')) {
+      const safdzFeatures = mapRef.current.queryRenderedFeatures(event.point, {
+        layers: ['safdz-fill']
       });
 
-      // You can add a popup or notification here to show SAFDZ details
-      return;
+      if (safdzFeatures && safdzFeatures.length > 0 && showSafdzLayer) {
+        const feature = safdzFeatures[0];
+        const props = feature.properties;
+
+        // Determine category based on hectares
+        const hectares = props?.HECTARES || 0;
+        let category = '';
+        if (hectares >= 100) category = 'Large (>100 ha)';
+        else if (hectares >= 50) category = 'Medium (50-100 ha)';
+        else if (hectares >= 20) category = 'Small (20-50 ha)';
+        else category = 'Micro (<20 ha)';
+
+        // Determine LMU category meaning
+        const lmuCode = props?.LMU_CODE;
+        let lmuDescription = '';
+        switch (lmuCode) {
+          case '111': lmuDescription = 'Prime Agricultural Land'; break;
+          case '112': lmuDescription = 'Good Agricultural Land'; break;
+          case '113': lmuDescription = 'Fair Agricultural Land'; break;
+          case '117': lmuDescription = 'Marginal Agricultural Land'; break;
+          default: lmuDescription = 'Unknown'; break;
+        }
+
+        // You can add a popup or notification here to show SAFDZ details
+        return;
+      }
     }
 
-    // Fall back to barangay click
-    const features = mapRef.current.queryRenderedFeatures(event.point, {
-      layers: ['barangay-boundaries-fill']
-    });
+    // Fall back to barangay click (only if layer exists)
+    if (map.getLayer('barangay-boundaries-fill')) {
+      const features = mapRef.current.queryRenderedFeatures(event.point, {
+        layers: ['barangay-boundaries-fill']
+      });
 
-    if (features && features.length > 0) {
-      const feature = features[0];
-      const brgyName = getMapboxFeatureBarangayName(feature.properties);
-      const matchingBarangay = brgyName ? findMatchingBarangay(brgyName) : undefined;
+      if (features && features.length > 0) {
+        const feature = features[0];
+        const brgyName = getMapboxFeatureBarangayName(feature.properties);
+        const matchingBarangay = brgyName ? findMatchingBarangay(brgyName) : undefined;
 
-      if (matchingBarangay) {
-        onSelectBarangay(matchingBarangay);
+        if (matchingBarangay) {
+          onSelectBarangay(matchingBarangay);
+        }
       }
     }
   }, [findMatchingBarangay, onSelectBarangay, getMapboxFeatureBarangayName, showSafdzLayer]);
@@ -609,6 +609,11 @@ export const AgriculturalMapView3D = React.memo(({
     if (!map || !safdzData || safdzLoading || safdzError) return;
 
     const addSafdzLayers = () => {
+      // Ensure map is fully loaded before adding layers
+      if (!map.isStyleLoaded()) {
+        return;
+      }
+
       try {
         // Always remove existing layers first to ensure clean state
         if (map.getLayer('safdz-labels')) map.removeLayer('safdz-labels');
@@ -622,14 +627,6 @@ export const AgriculturalMapView3D = React.memo(({
           type: 'geojson',
           data: safdzData
         });
-        console.log('✅ SAFDZ source added to map');
-        console.log('📊 SAFDZ data features:', safdzData.features.length);
-        console.log('🔍 Current filters:', currentFilters);
-        
-        // Log first feature for debugging
-        if (safdzData.features.length > 0) {
-          console.log('📌 Sample feature:', safdzData.features[0].properties);
-        }
 
         // Add fill layer with hectare-based categorization and filtering
         // Add at the top of the layer stack to ensure visibility
@@ -637,45 +634,46 @@ export const AgriculturalMapView3D = React.memo(({
           id: 'safdz-fill',
           type: 'fill',
           source: 'safdz-zones',
-          filter: ['all',
-            // Size category filter
-            ['any',
-              ['all', ['>=', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.large], true]],
-              ['all', ['>=', ['get', 'HECTARES'], 50], ['<', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.medium], true]],
-              ['all', ['>=', ['get', 'HECTARES'], 20], ['<', ['get', 'HECTARES'], 50], ['==', ['literal', currentFilters.sizeCategories.small], true]],
-              ['all', ['<', ['get', 'HECTARES'], 20], ['==', ['literal', currentFilters.sizeCategories.micro], true]]
-            ],
-            // Hectare range filter
-            ['>=', ['get', 'HECTARES'], currentFilters.minHectares],
-            ['<=', ['get', 'HECTARES'], currentFilters.maxHectares],
-            // LMU category filter
-            ['any',
-              ['all', ['==', ['get', 'LMU_CODE'], '111'], ['==', ['literal', currentFilters.lmuCategories['111']], true]],
-              ['all', ['==', ['get', 'LMU_CODE'], '112'], ['==', ['literal', currentFilters.lmuCategories['112']], true]],
-              ['all', ['==', ['get', 'LMU_CODE'], '113'], ['==', ['literal', currentFilters.lmuCategories['113']], true]],
-              ['all', ['==', ['get', 'LMU_CODE'], '117'], ['==', ['literal', currentFilters.lmuCategories['117']], true]]
-            ],
-            // Zoning filter
-            ['any',
-              ['all', ['==', ['get', 'ZONING'], 'Strategic Agriculture'], ['==', ['literal', currentFilters.zoningTypes['Strategic Agriculture']], true]]
-            ],
-            // Land use filter
-            ['any',
-              ['all', ['==', ['get', 'LANDUSE'], 'Agriculture'], ['==', ['literal', currentFilters.landUseTypes['Agriculture']], true]]
-            ],
-            // Class filter
-            ['any',
-              ['all', ['==', ['get', 'CLASS'], 'rural'], ['==', ['literal', currentFilters.classTypes['rural']], true]]
-            ],
-            // Barangay filter (if any selected)
-            currentFilters.selectedBarangays && currentFilters.selectedBarangays.length > 0
-              ? ['in', ['get', 'BRGY'], ['literal', currentFilters.selectedBarangays]]
-              : ['literal', true],
-            // Search filter
-            currentFilters.searchBarangay
-              ? ['in', currentFilters.searchBarangay.toLowerCase(), ['downcase', ['get', 'BRGY']]]
-              : ['literal', true]
-          ],
+          // Temporarily remove complex filters to test basic visibility
+          // filter: ['all',
+          //   // Size category filter
+          //   ['any',
+          //     ['all', ['>=', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.large], true]],
+          //     ['all', ['>=', ['get', 'HECTARES'], 50], ['<', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.medium], true]],
+          //     ['all', ['>=', ['get', 'HECTARES'], 20], ['<', ['get', 'HECTARES'], 50], ['==', ['literal', currentFilters.sizeCategories.small], true]],
+          //     ['all', ['<', ['get', 'HECTARES'], 20], ['==', ['literal', currentFilters.sizeCategories.micro], true]]
+          //   ],
+          //   // Hectare range filter
+          //   ['>=', ['get', 'HECTARES'], currentFilters.minHectares],
+          //   ['<=', ['get', 'HECTARES'], currentFilters.maxHectares],
+          //   // LMU category filter
+          //   ['any',
+          //     ['all', ['==', ['get', 'LMU_CODE'], '111'], ['==', ['literal', currentFilters.lmuCategories['111']], true]],
+          //     ['all', ['==', ['get', 'LMU_CODE'], '112'], ['==', ['literal', currentFilters.lmuCategories['112']], true]],
+          //     ['all', ['==', ['get', 'LMU_CODE'], '113'], ['==', ['literal', currentFilters.lmuCategories['113']], true]],
+          //     ['all', ['==', ['get', 'LMU_CODE'], '117'], ['==', ['literal', currentFilters.lmuCategories['117']], true]]
+          //   ],
+          //   // Zoning filter
+          //   ['any',
+          //     ['all', ['==', ['get', 'ZONING'], 'Strategic Agriculture'], ['==', ['literal', currentFilters.zoningTypes['Strategic Agriculture']], true]]
+          //   ],
+          //   // Land use filter
+          //   ['any',
+          //     ['all', ['==', ['get', 'LANDUSE'], 'Agriculture'], ['==', ['literal', currentFilters.landUseTypes['Agriculture']], true]]
+          //   ],
+          //   // Class filter
+          //   ['any',
+          //     ['all', ['==', ['get', 'CLASS'], 'rural'], ['==', ['literal', currentFilters.classTypes['rural']], true]]
+          //   ],
+          //   // Barangay filter (if any selected)
+          //   currentFilters.selectedBarangays && currentFilters.selectedBarangays.length > 0
+          //     ? ['in', ['get', 'BRGY'], ['literal', currentFilters.selectedBarangays]]
+          //     : ['literal', true],
+          //   // Search filter
+          //   currentFilters.searchBarangay
+          //     ? ['in', currentFilters.searchBarangay.toLowerCase(), ['downcase', ['get', 'BRGY']]]
+          //     : ['literal', true]
+          // ],
           paint: {
             'fill-color': [
               'case',
@@ -685,12 +683,11 @@ export const AgriculturalMapView3D = React.memo(({
               ['==', ['get', 'LMU_CODE'], '117'], '#ef4444', // Marginal Agricultural Land - Red
               '#94a3b8'                                       // Default - Gray for unknown
             ],
-            'fill-opacity': 0.5,
+            'fill-opacity': 0.8, // Increased opacity for visibility testing
             'fill-antialias': false // Pixelated edges for consistency
           }
         });
-        console.log('✅ SAFDZ fill layer added');
-        
+
         // Add a simple test layer without filters to verify data is rendering
         map.addLayer({
           id: 'safdz-fill-test',
@@ -704,63 +701,55 @@ export const AgriculturalMapView3D = React.memo(({
             'visibility': 'none' // Hidden by default, can be toggled for debugging
           }
         });
-        console.log('✅ SAFDZ test layer added (hidden)');
-        
+
         // Make map available globally for debugging
         (window as any).map = map;
-        
-        // Quick check of loaded features (no delay)
-        try {
-          const allFeatures = map.querySourceFeatures('safdz-zones');
-          console.log('📊 SAFDZ: Total features:', allFeatures.length);
-        } catch (error) {
-          console.error('❌ Error checking SAFDZ features:', error);
-        }
 
         // Add outline layer with matching categorization colors and filtering
         map.addLayer({
           id: 'safdz-outline',
           type: 'line',
           source: 'safdz-zones',
-          filter: ['all',
-            // Size category filter
-            ['any',
-              ['all', ['>=', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.large], true]],
-              ['all', ['>=', ['get', 'HECTARES'], 50], ['<', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.medium], true]],
-              ['all', ['>=', ['get', 'HECTARES'], 20], ['<', ['get', 'HECTARES'], 50], ['==', ['literal', currentFilters.sizeCategories.small], true]],
-              ['all', ['<', ['get', 'HECTARES'], 20], ['==', ['literal', currentFilters.sizeCategories.micro], true]]
-            ],
-            // Hectare range filter
-            ['>=', ['get', 'HECTARES'], currentFilters.minHectares],
-            ['<=', ['get', 'HECTARES'], currentFilters.maxHectares],
-            // LMU category filter
-            ['any',
-              ['all', ['==', ['get', 'LMU_CODE'], '111'], ['==', ['literal', currentFilters.lmuCategories['111']], true]],
-              ['all', ['==', ['get', 'LMU_CODE'], '112'], ['==', ['literal', currentFilters.lmuCategories['112']], true]],
-              ['all', ['==', ['get', 'LMU_CODE'], '113'], ['==', ['literal', currentFilters.lmuCategories['113']], true]],
-              ['all', ['==', ['get', 'LMU_CODE'], '117'], ['==', ['literal', currentFilters.lmuCategories['117']], true]]
-            ],
-            // Zoning filter
-            ['any',
-              ['all', ['==', ['get', 'ZONING'], 'Strategic Agriculture'], ['==', ['literal', currentFilters.zoningTypes['Strategic Agriculture']], true]]
-            ],
-            // Land use filter
-            ['any',
-              ['all', ['==', ['get', 'LANDUSE'], 'Agriculture'], ['==', ['literal', currentFilters.landUseTypes['Agriculture']], true]]
-            ],
-            // Class filter
-            ['any',
-              ['all', ['==', ['get', 'CLASS'], 'rural'], ['==', ['literal', currentFilters.classTypes['rural']], true]]
-            ],
-            // Barangay filter (if any selected)
-            currentFilters.selectedBarangays && currentFilters.selectedBarangays.length > 0
-              ? ['in', ['get', 'BRGY'], ['literal', currentFilters.selectedBarangays]]
-              : ['literal', true],
-            // Search filter
-            currentFilters.searchBarangay
-              ? ['in', currentFilters.searchBarangay.toLowerCase(), ['downcase', ['get', 'BRGY']]]
-              : ['literal', true]
-          ],
+          // Temporarily remove complex filters to test basic visibility
+          // filter: ['all',
+          //   // Size category filter
+          //   ['any',
+          //     ['all', ['>=', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.large], true]],
+          //     ['all', ['>=', ['get', 'HECTARES'], 50], ['<', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.medium], true]],
+          //     ['all', ['>=', ['get', 'HECTARES'], 20], ['<', ['get', 'HECTARES'], 50], ['==', ['literal', currentFilters.sizeCategories.small], true]],
+          //     ['all', ['<', ['get', 'HECTARES'], 20], ['==', ['literal', currentFilters.sizeCategories.micro], true]]
+          //   ],
+          //   // Hectare range filter
+          //   ['>=', ['get', 'HECTARES'], currentFilters.minHectares],
+          //   ['<=', ['get', 'HECTARES'], currentFilters.maxHectares],
+          //   // LMU category filter
+          //   ['any',
+          //     ['all', ['==', ['get', 'LMU_CODE'], '111'], ['==', ['literal', currentFilters.lmuCategories['111']], true]],
+          //     ['all', ['==', ['get', 'LMU_CODE'], '112'], ['==', ['literal', currentFilters.lmuCategories['112']], true]],
+          //     ['all', ['==', ['get', 'LMU_CODE'], '113'], ['==', ['literal', currentFilters.lmuCategories['113']], true]],
+          //     ['all', ['==', ['get', 'LMU_CODE'], '117'], ['==', ['literal', currentFilters.lmuCategories['117']], true]]
+          //   ],
+          //   // Zoning filter
+          //   ['any',
+          //     ['all', ['==', ['get', 'ZONING'], 'Strategic Agriculture'], ['==', ['literal', currentFilters.zoningTypes['Strategic Agriculture']], true]]
+          //   ],
+          //   // Land use filter
+          //   ['any',
+          //     ['all', ['==', ['get', 'LANDUSE'], 'Agriculture'], ['==', ['literal', currentFilters.landUseTypes['Agriculture']], true]]
+          //   ],
+          //   // Class filter
+          //   ['any',
+          //     ['all', ['==', ['get', 'CLASS'], 'rural'], ['==', ['literal', currentFilters.classTypes['rural']], true]]
+          //   ],
+          //   // Barangay filter (if any selected)
+          //   currentFilters.selectedBarangays && currentFilters.selectedBarangays.length > 0
+          //     ? ['in', ['get', 'BRGY'], ['literal', currentFilters.selectedBarangays]]
+          //     : ['literal', true],
+          //   // Search filter
+          //   currentFilters.searchBarangay
+          //     ? ['in', currentFilters.searchBarangay.toLowerCase(), ['downcase', ['get', 'BRGY']]]
+          //     : ['literal', true]
+          // ],
           paint: {
             'line-color': [
               'case',
@@ -770,11 +759,16 @@ export const AgriculturalMapView3D = React.memo(({
               ['==', ['get', 'LMU_CODE'], '117'], '#dc2626', // Marginal Agricultural Land - Dark Red
               '#64748b'                                       // Default - Dark Gray for unknown
             ],
-            'line-width': 1.5,
-            'line-opacity': 0.8
+            'line-width': 2, // Increased width for visibility testing
+            'line-opacity': 1.0 // Full opacity for visibility testing
           }
         });
-        console.log('✅ SAFDZ outline layer added');
+        
+        // Mark SAFDZ layers as ready and trigger 3D feature loading after a short delay
+        setSafdzLayersReady(true);
+        setTimeout(() => {
+          setLoad3DFeatures(true);
+        }, 100); // Small delay to ensure layers are fully rendered
 
         // Labels layer disabled - not showing barangay names and hectare sizes yet
         // Uncomment when labels are needed
@@ -837,23 +831,45 @@ export const AgriculturalMapView3D = React.memo(({
             'text-opacity': 0.9
           }
         });
-        console.log('✅ SAFDZ labels layer added');
         */
       } catch (error) {
-        console.error('Error adding SAFDZ layers:', error);
+        console.error('❌ Failed to add SAFDZ layers:', error);
       }
     };
 
-    // Add layers immediately if style is loaded, otherwise wait
+    // Add layers with multiple fallback mechanisms
+    let layersAdded = false;
+
+    const tryAddLayers = () => {
+      if (!layersAdded && map.isStyleLoaded()) {
+        addSafdzLayers();
+        layersAdded = true;
+      }
+    };
+
+    // Try immediately if style is already loaded
     if (map.isStyleLoaded()) {
-      addSafdzLayers();
-    } else {
-      map.once('style.load', addSafdzLayers);
+      tryAddLayers();
     }
 
+    // Also listen for style.load event (in case style wasn't loaded yet)
+    const onStyleLoad = () => {
+      tryAddLayers();
+    };
+    map.on('style.load', onStyleLoad);
+
+    // Additional fallback: try again after a short delay
+    const fallbackTimer = setTimeout(() => {
+      if (!layersAdded) {
+        console.log('⚠️ Using fallback to add SAFDZ layers');
+        tryAddLayers();
+      }
+    }, 500);
+
     return () => {
+      map.off('style.load', onStyleLoad);
+      clearTimeout(fallbackTimer);
       // Cleanup layers when component unmounts
-      const map = mapRef.current?.getMap();
       if (map && map.getStyle()) {
         try {
           // if (map.getLayer('safdz-labels')) map.removeLayer('safdz-labels'); // Labels disabled
@@ -895,7 +911,7 @@ export const AgriculturalMapView3D = React.memo(({
     updateVisibility();
   }, [showSafdzLayer, safdzData]);
 
-  // Add 3D terrain when map loads
+  // Add 3D terrain when map loads (deferred for better initial performance)
   const handleMapLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
@@ -916,79 +932,90 @@ export const AgriculturalMapView3D = React.memo(({
     // Hide labels immediately and also on style load
     hideLabels();
     map.on('style.load', hideLabels);
-
-    // Add terrain source for 3D elevation
-    map.addSource('mapbox-dem', {
-      type: 'raster-dem',
-      url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-      tileSize: 512,
-      maxzoom: 14
-    });
-
-    // Set the terrain with reduced exaggeration for better performance
-    // Lower exaggeration = better performance
-    map.setTerrain({
-      source: 'mapbox-dem',
-      exaggeration: [
-        'interpolate',
-        ['linear'],
-        ['zoom'],
-        10, 1.5,  // Reduced from 2.5
-        14, 1.2,  // Reduced from 1.8
-        18, 0.8   // Reduced from 1.2
-      ]
-    });
-
-    // Add 3D buildings layer with reduced complexity for better performance
-    if (!map.getLayer('3d-buildings')) {
-      map.addLayer({
-        id: '3d-buildings',
-        source: 'composite',
-        'source-layer': 'building',
-        filter: ['==', 'extrude', 'true'],
-        type: 'fill-extrusion',
-        minzoom: 15, // Increased from 14 - buildings only at closer zoom
-        paint: {
-          // Simplified color for better performance
-          'fill-extrusion-color': '#c0c0c0',
-          // Reduced height exaggeration
-          'fill-extrusion-height': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            15, 0,
-            15.5, ['*', ['get', 'height'], 0.3], // Reduced from 0.5
-            16, ['*', ['get', 'height'], 0.6]  // Reduced from 1.0
-          ],
-          'fill-extrusion-base': ['get', 'min_height'],
-          // Reduced opacity for better performance
-          'fill-extrusion-opacity': 0.6, // Reduced from 0.85
-          // Disabled vertical gradient for performance
-          'fill-extrusion-vertical-gradient': false
-        }
-      });
-    }
-
-    // Simplified fog for better performance
-    map.setFog({
-      color: 'rgb(220, 230, 250)', // Simplified color
-      'high-color': 'rgb(150, 180, 220)', // Simplified high color
-      'horizon-blend': 0.1, // Increased for simpler blending
-      'space-color': 'rgb(50, 60, 80)', // Simplified space color
-      'star-intensity': 0.0, // Disabled stars for performance
-      range: [3, 8] // Reduced range for simpler calculation
-    });
-
-    // Simplified lighting for better performance
-    map.setLight({
-      anchor: 'viewport',
-      color: 'white',
-      intensity: 0.3, // Reduced intensity for better performance
-      position: [1, 90, 30] // Simplified position
-    });
-
-    console.log('3D terrain, buildings, fog, and lighting added with optimizations');
   }, []);
+
+  // Add 3D features after SAFDZ layers are rendered (deferred loading)
+  useEffect(() => {
+    if (!load3DFeatures) return;
+    
+    const map = mapRef.current?.getMap();
+    if (!map || !map.isStyleLoaded()) return;
+
+    try {
+      // Add terrain source for 3D elevation
+      if (!map.getSource('mapbox-dem')) {
+        map.addSource('mapbox-dem', {
+          type: 'raster-dem',
+          url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+          tileSize: 512,
+          maxzoom: 14
+        });
+      }
+
+      // Set the terrain with reduced exaggeration for better performance
+      map.setTerrain({
+        source: 'mapbox-dem',
+        exaggeration: [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          10, 1.5,  // Reduced from 2.5
+          14, 1.2,  // Reduced from 1.8
+          18, 0.8   // Reduced from 1.2
+        ]
+      });
+
+      // Add 3D buildings layer with reduced complexity for better performance
+      if (!map.getLayer('3d-buildings')) {
+        map.addLayer({
+          id: '3d-buildings',
+          source: 'composite',
+          'source-layer': 'building',
+          filter: ['==', 'extrude', 'true'],
+          type: 'fill-extrusion',
+          minzoom: 15, // Increased from 14 - buildings only at closer zoom
+          paint: {
+            // Simplified color for better performance
+            'fill-extrusion-color': '#c0c0c0',
+            // Reduced height exaggeration
+            'fill-extrusion-height': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              15, 0,
+              15.5, ['*', ['get', 'height'], 0.3], // Reduced from 0.5
+              16, ['*', ['get', 'height'], 0.6]  // Reduced from 1.0
+            ],
+            'fill-extrusion-base': ['get', 'min_height'],
+            // Reduced opacity for better performance
+            'fill-extrusion-opacity': 0.6, // Reduced from 0.85
+            // Disabled vertical gradient for performance
+            'fill-extrusion-vertical-gradient': false
+          }
+        });
+      }
+
+      // Simplified fog for better performance
+      map.setFog({
+        color: 'rgb(220, 230, 250)', // Simplified color
+        'high-color': 'rgb(150, 180, 220)', // Simplified high color
+        'horizon-blend': 0.1, // Increased for simpler blending
+        'space-color': 'rgb(50, 60, 80)', // Simplified space color
+        'star-intensity': 0.0, // Disabled stars for performance
+        range: [3, 8] // Reduced range for simpler calculation
+      });
+
+      // Simplified lighting for better performance
+      map.setLight({
+        anchor: 'viewport',
+        color: 'white',
+        intensity: 0.3, // Reduced intensity for better performance
+        position: [1, 90, 30] // Simplified position
+      });
+    } catch (error) {
+      console.error('❌ Failed to add 3D features:', error);
+    }
+  }, [load3DFeatures]);
 
   // Fill layer configuration for Mapbox Boundaries v4.5
   const fillLayer: FillLayer = {
@@ -1063,6 +1090,13 @@ export const AgriculturalMapView3D = React.memo(({
           terrain={{ source: 'mapbox-dem', exaggeration: 2.0 }}
           style={{ width: '100%', height: '100%' }}
           attributionControl={false}
+          transformRequest={(url) => {
+            // Block Mapbox telemetry/analytics requests
+            if (url.includes('events.mapbox.com')) {
+              return { cancel: true };
+            }
+            return { url };
+          }}
         >
           {/* Mapbox Boundaries - Load only when map is ready */}
           {boundariesLoaded && (
@@ -1368,7 +1402,7 @@ export const AgriculturalMapView3D = React.memo(({
                     // Ensure terrain is enabled for 3D view
                     map.setTerrain({ source: 'mapbox-dem', exaggeration: 2.0 });
                   } catch (error) {
-                    console.warn('Terrain not available for this map style:', error);
+                    // Terrain not available for this map style, silently continue
                   }
 
                   // Re-add SAFDZ layers immediately after style change
