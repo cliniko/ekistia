@@ -29,6 +29,9 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
    - **Environment**: Select all (Production, Preview, Development)
 4. Repeat for `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
 5. Click **Save**
+6. **IMPORTANT**: After adding environment variables, **redeploy** your project for changes to take effect
+
+> ⚠️ **Critical Note**: Vercel does NOT use the `@variable_name` syntax from vercel.json. You must add the actual environment variables directly in the Vercel Dashboard settings.
 
 ## Deployment Steps
 
@@ -77,11 +80,36 @@ vercel --prod
 ### Map Not Loading
 
 **Symptom**: Blank map or error in console
-**Solution**: 
-1. Check browser console for error: `❌ MAPBOX TOKEN MISSING`
-2. Verify `VITE_MAPBOX_TOKEN` is set in Vercel environment variables
-3. Ensure the environment variable is set for **Production** environment
-4. Redeploy after adding the variable
+
+**Common Causes & Solutions**:
+
+1. **Missing Environment Variable**
+   - Check browser console for: `❌ MAPBOX TOKEN MISSING`
+   - Verify `VITE_MAPBOX_TOKEN` is set in Vercel Dashboard
+   - Ensure it's set for **Production** environment
+   - **Must redeploy** after adding variables
+
+2. **Environment Variables Not Exposed to Client**
+   - Vite requires `VITE_` prefix for client-side variables
+   - Verify your token starts with `VITE_MAPBOX_TOKEN` (not just `MAPBOX_TOKEN`)
+   - Check build logs to ensure variables are being loaded
+
+3. **Vercel Configuration**
+   - **Do NOT use** `@variable_name` syntax in vercel.json
+   - Environment variables must be added in **Vercel Dashboard UI**
+   - After adding variables, **trigger a new deployment**
+
+4. **Validation Steps**:
+   ```bash
+   # In browser console on deployed site:
+   console.log(import.meta.env.VITE_MAPBOX_TOKEN ? 'Token present' : 'Token missing');
+   ```
+
+5. **Quick Fix**:
+   - Go to Vercel Dashboard → Your Project → Settings → Environment Variables
+   - Add: `VITE_MAPBOX_TOKEN` = `your_actual_token_here`
+   - Select: Production, Preview, Development
+   - Go to Deployments → Redeploy latest deployment
 
 ### Build Fails
 
