@@ -6,9 +6,11 @@ import MapView from '@/components/MapView';
 import PotholeDetails from '@/components/PotholeDetails';
 import DataVisualization from '@/components/DataVisualization';
 import DocumentManagement from '@/components/DocumentManagement';
-import { Pothole, Status, Severity, GaussianSplattingData } from '@/types';
+import HazardLayerControl from '@/components/HazardLayerControl';
+import { Pothole, Status, Severity, GaussianSplattingData, HazardLayer } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { loadAllHazardLayers } from '@/services/hazardDataService';
 import { X } from "lucide-react";
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -22,6 +24,12 @@ const Index = () => {
   const [activePanel, setActivePanel] = useState<'filters' | 'data' | 'documents' | null>(null);
   const { toast } = useToast();
   const isMobile = useIsMobile();
+
+  // Hazard layers state
+  const [hazardLayers, setHazardLayers] = useState<HazardLayer[]>([]);
+  const [enabledHazardLayers, setEnabledHazardLayers] = useState<string[]>([]);
+  const [hazardOpacity, setHazardOpacity] = useState<number>(0.7);
+  const [hazardLayersLoading, setHazardLayersLoading] = useState(true);
 
   // Fetch potholes from Supabase
   useEffect(() => {
@@ -117,6 +125,29 @@ const Index = () => {
     setFilteredPotholes(filtered);
   }, [potholes, severityFilter, statusFilter]);
 
+  // Load hazard layers
+  useEffect(() => {
+    const loadHazardData = async () => {
+      try {
+        setHazardLayersLoading(true);
+        const loadedLayers = await loadAllHazardLayers();
+        setHazardLayers(loadedLayers);
+        console.log('✅ Hazard layers loaded:', loadedLayers.length);
+      } catch (error) {
+        console.error('Error loading hazard layers:', error);
+        toast({
+          variant: "destructive",
+          title: "Error loading hazard data",
+          description: "Could not load hazard layers. Some features may not be available."
+        });
+      } finally {
+        setHazardLayersLoading(false);
+      }
+    };
+
+    loadHazardData();
+  }, [toast]);
+
   const handleSelectPothole = (pothole: Pothole) => {
     setSelectedPothole(pothole);
   };
@@ -199,6 +230,19 @@ const Index = () => {
     setActivePanel(activePanel === panel ? null : panel);
   };
 
+  // Hazard layer handlers
+  const handleHazardLayerToggle = (layerId: string) => {
+    setEnabledHazardLayers(prev =>
+      prev.includes(layerId)
+        ? prev.filter(id => id !== layerId)
+        : [...prev, layerId]
+    );
+  };
+
+  const handleHazardOpacityChange = (opacity: number) => {
+    setHazardOpacity(opacity);
+  };
+
   return (
     <div className="min-h-screen relative">
       {/* Fullscreen Map */}
@@ -207,14 +251,28 @@ const Index = () => {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pothole-500"></div>
         </div>
       ) : (
-        <MapView 
-          potholes={filteredPotholes} 
-          onSelectPothole={handleSelectPothole} 
+        <MapView
+          potholes={filteredPotholes}
+          onSelectPothole={handleSelectPothole}
+          hazardLayers={hazardLayers}
+          enabledHazardLayers={enabledHazardLayers}
+          hazardOpacity={hazardOpacity}
         />
       )}
       
       {/* Floating Header with Integrated Controls */}
       <Header activePanel={activePanel} togglePanel={togglePanel} />
+
+      {/* Hazard Layer Control */}
+      {!hazardLayersLoading && hazardLayers.length > 0 && (
+        <HazardLayerControl
+          hazardLayers={hazardLayers}
+          enabledLayers={enabledHazardLayers}
+          onLayerToggle={handleHazardLayerToggle}
+          opacity={hazardOpacity}
+          onOpacityChange={handleHazardOpacityChange}
+        />
+      )}
       
       {/* Mobile-only Control Buttons - visible on smaller screens */}
       <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-20 py-2 md:hidden">
@@ -285,7 +343,7 @@ const Index = () => {
             >
               <X size={18} />
             </button>
-            <DataVisualization potholes={potholes} />
+            <DataVisualization potholes={potholes} hazardLayers={hazardLayers} />
           </div>
         </div>
       )}

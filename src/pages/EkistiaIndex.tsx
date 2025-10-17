@@ -1,67 +1,196 @@
-import React, { useState } from 'react';
-import { X } from "lucide-react";
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import EkistiaHeader from '@/components/EkistiaHeader';
-import AgriculturalMapView from '@/components/AgriculturalMapView';
-import CropFilters from '@/components/CropFilters';
+import AgriculturalMapView3D from '@/components/AgriculturalMapView3D';
 import BarangayDetails from '@/components/BarangayDetails';
-import AgriculturalDataVisualization from '@/components/AgriculturalDataVisualization';
-import TransactionHistory from '@/components/TransactionHistory';
-import MarketplacePanel from '@/components/MarketplacePanel';
+import MapAnalyticsDashboard from '@/components/MapAnalyticsDashboard';
+import CollectDataPanel from '@/components/CollectDataPanel';
+import HazardPanel from '@/components/HazardPanel';
+import type { HazardLayerConfig } from '@/components/AgriculturalHazardLayerControl';
 import { barangayData } from '@/data/barangayData';
-import { sampleLandDemands, sampleLandOffers } from '@/data/sampleMarketplaceData';
-import { Barangay, CropType, SuitabilityLevel } from '@/types/agricultural';
+import { Barangay, CropType } from '@/types/agricultural';
 
-const EkistiaIndex = () => {
+const EkistiaIndex = React.memo(() => {
   const [barangays] = useState<Barangay[]>(barangayData);
   const [selectedBarangay, setSelectedBarangay] = useState<Barangay | null>(null);
   const [selectedCrop, setSelectedCrop] = useState<CropType | 'all'>('all');
-  const [suitabilityFilter, setSuitabilityFilter] = useState<SuitabilityLevel | 'all'>('all');
-  const [activePanel, setActivePanel] = useState<'filters' | 'data' | 'transactions' | 'marketplace' | null>(null);
   const isMobile = useIsMobile();
 
-  const filteredBarangays = barangays.filter(barangay => {
-    if (suitabilityFilter === 'all') return true;
-    return barangay.suitabilityData.some(s => s.suitabilityLevel === suitabilityFilter);
+  // SAFDZ filter state
+  const [safdzFilters, setSafdzFilters] = useState({
+    sizeCategories: {
+      large: true,
+      medium: true,
+      small: true,
+      micro: true
+    },
+    minHectares: 0,
+    maxHectares: 1000,
+    searchBarangay: '',
+    lmuCategories: {
+      '111': true, // Prime Agricultural Land
+      '112': true, // Good Agricultural Land
+      '113': true, // Fair Agricultural Land
+      '117': true  // Marginal Agricultural Land
+    },
+    zoningTypes: {
+      'Strategic Agriculture': true
+    },
+    landUseTypes: {
+      'Agriculture': true
+    },
+    classTypes: {
+      'rural': true
+    }
   });
+  const [showSafdzFilters, setShowSafdzFilters] = useState(false);
+  const [safdzData, setSafdzData] = useState<{ features: any[] } | null>(null);
+  const [showMapAnalytics, setShowMapAnalytics] = useState(false);
+  const [showHazardsPanel, setShowHazardsPanel] = useState(false);
+  const [showCollectPanel, setShowCollectPanel] = useState(false);
 
-  const handleSelectBarangay = (barangay: Barangay) => {
+  // Hazard layers state
+  const [hazardLayers, setHazardLayers] = useState<HazardLayerConfig[]>([]);
+  const [globalHazardOpacity, setGlobalHazardOpacity] = useState(0.5);
+
+  // Load SAFDZ data
+  useEffect(() => {
+    fetch('/safdz_agri_barangays.geojson')
+      .then(response => response.json())
+      .then(data => {
+        setSafdzData(data);
+        console.log('✅ SAFDZ data loaded for header:', data.features.length, 'features');
+      })
+      .catch(error => console.error('Error loading SAFDZ data for header:', error));
+  }, []);
+
+  // Memoize summary statistics
+  const summaryStats = useMemo(() => ({
+    totalAvailableLand: barangays.reduce((sum, b) => sum + b.availableLand, 0),
+    totalActiveDemands: barangays.reduce((sum, b) => sum + b.activeDemands, 0)
+  }), [barangays]);
+
+  const { totalAvailableLand, totalActiveDemands } = summaryStats;
+
+  const handleSelectBarangay = useCallback((barangay: Barangay) => {
     setSelectedBarangay(barangay);
-  };
+  }, []);
 
-  const handleClearFilters = () => {
-    setSelectedCrop('all');
-    setSuitabilityFilter('all');
-  };
+  // Hazard layer handlers
+  const handleHazardLayerToggle = useCallback((layerId: string) => {
+    setHazardLayers(prev =>
+      prev.map(layer =>
+        layer.id === layerId
+          ? { ...layer, enabled: !layer.enabled }
+          : layer
+      )
+    );
+  }, []);
 
-  const togglePanel = (panel: 'filters' | 'data' | 'transactions' | 'marketplace') => {
-    setActivePanel(activePanel === panel ? null : panel);
-  };
+  const handleHazardCategoryToggle = useCallback((layerId: string, categoryId: string) => {
+    setHazardLayers(prev =>
+      prev.map(layer =>
+        layer.id === layerId && layer.categories
+          ? {
+              ...layer,
+              categories: layer.categories.map(cat =>
+                cat.id === categoryId
+                  ? { ...cat, enabled: !cat.enabled }
+                  : cat
+              )
+            }
+          : layer
+      )
+    );
+  }, []);
 
-  const totalAvailableLand = barangays.reduce((sum, b) => sum + b.availableLand, 0);
-  const totalActiveDemands = barangays.reduce((sum, b) => sum + b.activeDemands, 0);
+  const handleHazardOpacityChange = useCallback((layerId: string, opacity: number) => {
+    setHazardLayers(prev =>
+      prev.map(layer =>
+        layer.id === layerId
+          ? { ...layer, opacity }
+          : layer
+      )
+    );
+  }, []);
+
 
   return (
     <div className="min-h-screen relative">
       {/* Fullscreen Agricultural Map */}
-      <AgriculturalMapView 
-        barangays={filteredBarangays}
+      <AgriculturalMapView3D
+        barangays={barangays}
         selectedCrop={selectedCrop}
         onSelectBarangay={handleSelectBarangay}
+        currentFilters={safdzFilters}
+        hazardLayers={hazardLayers}
+        onHazardLayersChange={setHazardLayers}
+        globalHazardOpacity={globalHazardOpacity}
       />
-      
+
       {/* Ekistia Header */}
-      <EkistiaHeader 
-        activePanel={activePanel} 
-        togglePanel={togglePanel}
-        totalAvailableLand={totalAvailableLand}
-        activeDemands={totalActiveDemands}
+      <EkistiaHeader
+        safdzFilters={safdzFilters}
+        onSafdzFiltersChange={setSafdzFilters}
+        safdzData={safdzData}
+        showSafdzFilters={showSafdzFilters}
+        toggleSafdzFilters={() => setShowSafdzFilters(!showSafdzFilters)}
+        showMapAnalytics={showMapAnalytics}
+        toggleMapAnalytics={() => {
+          setShowMapAnalytics(!showMapAnalytics);
+          if (!showMapAnalytics) {
+            setShowHazardsPanel(false);
+            setShowCollectPanel(false);
+          }
+        }}
+        showHazardsPanel={showHazardsPanel}
+        toggleHazardsPanel={() => {
+          setShowHazardsPanel(!showHazardsPanel);
+          if (!showHazardsPanel) {
+            setShowMapAnalytics(false);
+            setShowCollectPanel(false);
+          }
+        }}
+        onCollectClick={() => {
+          setShowCollectPanel(true);
+          setShowMapAnalytics(false);
+          setShowHazardsPanel(false);
+        }}
+        showCollectPanel={showCollectPanel}
       />
-      
+
+      {/* Map Analytics Dashboard */}
+      {showMapAnalytics && (
+        <MapAnalyticsDashboard
+          barangays={barangays}
+          onClose={() => setShowMapAnalytics(false)}
+        />
+      )}
+
+      {/* Hazards Panel */}
+      {showHazardsPanel && (
+        <HazardPanel
+          hazardLayers={hazardLayers}
+          onLayerToggle={handleHazardLayerToggle}
+          onCategoryToggle={handleHazardCategoryToggle}
+          onOpacityChange={handleHazardOpacityChange}
+          globalOpacity={globalHazardOpacity}
+          onGlobalOpacityChange={setGlobalHazardOpacity}
+          onClose={() => setShowHazardsPanel(false)}
+        />
+      )}
+
+      {/* Collect Data Panel */}
+      {showCollectPanel && (
+        <CollectDataPanel
+          onClose={() => setShowCollectPanel(false)}
+        />
+      )}
+
       {/* Selected Barangay Details Panel */}
       {selectedBarangay && (
         <div className={`fixed ${isMobile ? 'bottom-16 left-4 right-4 top-auto z-30' : 'top-24 right-4 z-30 w-96'} max-h-[calc(100vh-120px)] overflow-auto bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border transition-all duration-300 ease-in-out`}>
-          <BarangayDetails 
+          <BarangayDetails
             barangay={selectedBarangay}
             selectedCrop={selectedCrop}
             onClose={() => setSelectedBarangay(null)}
@@ -69,76 +198,11 @@ const EkistiaIndex = () => {
         </div>
       )}
       
-      {/* Floating Panels */}
-      {activePanel === 'filters' && (
-        <div className={`fixed ${isMobile ? 'top-24 left-4 right-4' : 'top-24 left-4 w-96'} z-30 bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-4`}>
-          <button 
-            onClick={() => setActivePanel(null)}
-            className="absolute top-2 right-2 p-1 rounded-full hover:bg-muted transition-colors"
-          >
-            <X size={18} />
-          </button>
-          <CropFilters 
-            selectedCrop={selectedCrop}
-            suitabilityFilter={suitabilityFilter}
-            onCropChange={setSelectedCrop}
-            onSuitabilityChange={setSuitabilityFilter}
-            onClearFilters={handleClearFilters}
-            totalBarangays={barangays.length}
-            filteredCount={filteredBarangays.length}
-          />
-        </div>
-      )}
-      
-      {activePanel === 'data' && (
-        <div className={`fixed ${isMobile ? 'top-24 left-4 right-4' : 'top-24 left-4 w-[calc(100%-2rem)] max-w-6xl'} z-30 max-h-[calc(100vh-120px)] overflow-auto bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-4`}>
-          <button 
-            onClick={() => setActivePanel(null)}
-            className="absolute top-2 right-2 p-1 rounded-full hover:bg-muted transition-colors"
-          >
-            <X size={18} />
-          </button>
-          <AgriculturalDataVisualization barangays={barangays} />
-        </div>
-      )}
-      
-      {activePanel === 'marketplace' && (
-        <div className={`fixed ${isMobile ? 'top-24 left-4 right-4' : 'top-24 left-4 w-[calc(100%-2rem)] max-w-6xl'} z-30 max-h-[calc(100vh-120px)] overflow-auto bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-4`}>
-          <button 
-            onClick={() => setActivePanel(null)}
-            className="absolute top-2 right-2 p-1 rounded-full hover:bg-muted transition-colors"
-          >
-            <X size={18} />
-          </button>
-          <MarketplacePanel 
-            demands={sampleLandDemands}
-            offers={sampleLandOffers}
-            onCreateDemand={() => {}}
-            onCreateOffer={() => {}}
-          />
-        </div>
-      )}
 
-      {activePanel === 'transactions' && (
-        <div className={`fixed ${isMobile ? 'top-24 left-4 right-4' : 'top-24 left-4 w-[calc(100%-2rem)] max-w-4xl'} z-30 max-h-[calc(100vh-120px)] overflow-auto bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-4`}>
-          <button 
-            onClick={() => setActivePanel(null)}
-            className="absolute top-2 right-2 p-1 rounded-full hover:bg-muted transition-colors"
-          >
-            <X size={18} />
-          </button>
-          <TransactionHistory />
-        </div>
-      )}
-      
-      {/* Footer */}
-      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-20 bg-card/95 backdrop-blur-sm py-2 px-4 rounded-full shadow-md border">
-        <div className="text-center text-sm text-muted-foreground">
-          &copy; {new Date().getFullYear()} Ekistia Platform. Powered by Spatial Intelligence.
-        </div>
-      </div>
     </div>
   );
-};
+});
+
+EkistiaIndex.displayName = 'EkistiaIndex';
 
 export default EkistiaIndex;

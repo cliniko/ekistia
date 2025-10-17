@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, Legend, LabelList } from 'recharts';
 import { Barangay, CropType, SuitabilityLevel } from '@/types/agricultural';
@@ -8,17 +8,17 @@ interface AgriculturalDataVisualizationProps {
   barangays: Barangay[];
 }
 
-export const AgriculturalDataVisualization = ({ barangays }: AgriculturalDataVisualizationProps) => {
-  // Prepare data for crop suitability distribution
-  const cropSuitabilityData = () => {
+export const AgriculturalDataVisualization = React.memo(({ barangays }: AgriculturalDataVisualizationProps) => {
+  // Memoize expensive crop suitability data calculation
+  const cropSuitabilityData = useMemo(() => {
     const crops: CropType[] = ['cacao', 'banana', 'mango', 'coconut', 'rice', 'corn'];
     return crops.map(crop => {
       const totalSuitable = barangays.reduce((sum, barangay) => {
         const suitability = barangay.suitabilityData.find(s => s.crop === crop);
         return sum + (suitability?.suitableArea || 0);
       }, 0);
-      
-      const barangaysWithCrop = barangays.filter(b => 
+
+      const barangaysWithCrop = barangays.filter(b =>
         b.suitabilityData.some(s => s.crop === crop)
       ).length;
 
@@ -29,10 +29,10 @@ export const AgriculturalDataVisualization = ({ barangays }: AgriculturalDataVis
         emoji: getCropEmoji(crop)
       };
     });
-  };
+  }, [barangays]);
 
-  // Prepare data for suitability levels
-  const suitabilityLevelData = () => {
+  // Memoize expensive suitability level data calculation
+  const suitabilityLevelData = useMemo(() => {
     const levels: SuitabilityLevel[] = ['highly-suitable', 'moderately-suitable', 'low-suitable', 'not-suitable'];
     return levels.map(level => {
       const totalArea = barangays.reduce((sum, barangay) => {
@@ -47,10 +47,10 @@ export const AgriculturalDataVisualization = ({ barangays }: AgriculturalDataVis
         color: getSuitabilityHexColor(level)
       };
     });
-  };
+  }, [barangays]);
 
-  // Prepare stacked composition data: suitability levels per crop
-  const suitabilityCompositionByCropData = () => {
+  // Memoize stacked composition data: suitability levels per crop
+  const suitabilityCompositionByCropData = useMemo(() => {
     const crops: CropType[] = ['cacao', 'banana', 'mango', 'coconut', 'rice', 'corn'];
     const levels: SuitabilityLevel[] = ['highly-suitable', 'moderately-suitable', 'low-suitable', 'not-suitable'];
     return crops.map((crop) => {
@@ -69,10 +69,10 @@ export const AgriculturalDataVisualization = ({ barangays }: AgriculturalDataVis
       const label = `${getCropEmoji(crop)} ${crop.charAt(0).toUpperCase() + crop.slice(1)}`;
       return { crop: label, ...levelTotals };
     });
-  };
+  }, [barangays]);
 
-  // Prepare data for top barangays by agricultural potential
-  const topBarangaysData = () => {
+  // Memoize data for top barangays by agricultural potential
+  const topBarangaysData = useMemo(() => {
     return barangays
       .map(barangay => ({
         name: barangay.name,
@@ -83,13 +83,17 @@ export const AgriculturalDataVisualization = ({ barangays }: AgriculturalDataVis
       }))
       .sort((a, b) => b.agricultural - a.agricultural)
       .slice(0, 10);
-  };
+  }, [barangays]);
 
-  // Calculate summary statistics
-  const totalAgricultural = barangays.reduce((sum, b) => sum + b.agriculturalArea, 0);
-  const totalAvailable = barangays.reduce((sum, b) => sum + b.availableLand, 0);
-  const totalMatched = barangays.reduce((sum, b) => sum + (b.matchedArea || 0), 0);
-  const totalDemands = barangays.reduce((sum, b) => sum + b.activeDemands, 0);
+  // Memoize summary statistics
+  const summaryStats = useMemo(() => ({
+    totalAgricultural: barangays.reduce((sum, b) => sum + b.agriculturalArea, 0),
+    totalAvailable: barangays.reduce((sum, b) => sum + b.availableLand, 0),
+    totalMatched: barangays.reduce((sum, b) => sum + (b.matchedArea || 0), 0),
+    totalDemands: barangays.reduce((sum, b) => sum + b.activeDemands, 0)
+  }), [barangays]);
+
+  const { totalAgricultural, totalAvailable, totalMatched, totalDemands } = summaryStats;
 
   const getCropEmoji = (crop: CropType): string => {
     const emojiMap: Record<CropType, string> = {
@@ -308,6 +312,8 @@ export const AgriculturalDataVisualization = ({ barangays }: AgriculturalDataVis
       </Card>
     </div>
   );
-};
+});
+
+AgriculturalDataVisualization.displayName = 'AgriculturalDataVisualization';
 
 export default AgriculturalDataVisualization;

@@ -3,7 +3,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line, AreaChart, Area, ScatterChart, Scatter, ZAxis } from 'recharts';
-import { Pothole, Severity, Status } from '@/types';
+import { Pothole, Severity, Status, HazardLayer } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   HoverCard,
@@ -14,9 +14,10 @@ import { InfoIcon } from "lucide-react";
 
 interface DataVisualizationProps {
   potholes: Pothole[];
+  hazardLayers?: HazardLayer[];
 }
 
-export const DataVisualization = ({ potholes }: DataVisualizationProps) => {
+export const DataVisualization = ({ potholes, hazardLayers = [] }: DataVisualizationProps) => {
   const isMobile = useIsMobile();
   
   // Basic severity and status counts
@@ -124,7 +125,62 @@ export const DataVisualization = ({ potholes }: DataVisualizationProps) => {
       severity: p.severity,
       id: p.id
     }));
-  
+
+  // Hazard data analytics
+  const hazardStats = hazardLayers.map(layer => {
+    const features = layer.data?.features || [];
+    const totalArea = features.reduce((sum, feature) =>
+      sum + (feature.properties?.Shape_Area || 0), 0
+    );
+    const totalPerimeter = features.reduce((sum, feature) =>
+      sum + (feature.properties?.Shape_Leng || 0), 0
+    );
+
+    return {
+      name: layer.name,
+      featureCount: features.length,
+      totalArea: totalArea / 1000000, // Convert to km²
+      totalPerimeter: totalPerimeter / 1000, // Convert to km
+      avgArea: features.length > 0 ? (totalArea / features.length) / 1000000 : 0,
+      type: layer.type
+    };
+  });
+
+  // Hazard risk distribution (for flood and landslide layers)
+  const getHazardRiskDistribution = () => {
+    const floodLayer = hazardLayers.find(l => l.type === 'flood');
+    const landslideLayer = hazardLayers.find(l => l.type === 'landslide');
+
+    const floodRisks = floodLayer?.data?.features?.reduce((acc, feature) => {
+      const risk = feature.properties?.FloodSusc;
+      if (risk) acc[risk] = (acc[risk] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>) || {};
+
+    const landslideRisks = landslideLayer?.data?.features?.reduce((acc, feature) => {
+      const risk = feature.properties?.LandslideSusc;
+      if (risk) acc[risk] = (acc[risk] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>) || {};
+
+    return {
+      flood: Object.entries(floodRisks).map(([risk, count]) => ({
+        name: `${risk} Flood Risk`,
+        value: count,
+        risk,
+        type: 'flood'
+      })),
+      landslide: Object.entries(landslideRisks).map(([risk, count]) => ({
+        name: `${risk} Landslide Risk`,
+        value: count,
+        risk,
+        type: 'landslide'
+      }))
+    };
+  };
+
+  const hazardRiskData = getHazardRiskDistribution();
+
   // Calculate chart heights based on device
   const chartHeight = isMobile ? 220 : 240;
   
@@ -153,13 +209,14 @@ export const DataVisualization = ({ potholes }: DataVisualizationProps) => {
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className={`grid w-full ${isMobile ? 'grid-cols-2' : 'grid-cols-4'} mb-4`}>
+          <TabsList className={`grid w-full ${isMobile ? 'grid-cols-3' : 'grid-cols-5'} mb-4`}>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="severity">By Severity</TabsTrigger>
             {!isMobile && <TabsTrigger value="status">By Status</TabsTrigger>}
+            {!isMobile && <TabsTrigger value="hazards">Hazards</TabsTrigger>}
             {!isMobile && <TabsTrigger value="advanced">Advanced</TabsTrigger>}
             {isMobile && (
-              <TabsTrigger value="more" className="col-span-2 mt-2">
+              <TabsTrigger value="more" className="col-span-3 mt-2">
                 More Analytics
               </TabsTrigger>
             )}
@@ -379,7 +436,115 @@ export const DataVisualization = ({ potholes }: DataVisualizationProps) => {
               </Card>
             </div>
           </TabsContent>
-          
+
+          {/* Hazard Analytics Tab */}
+          <TabsContent value="hazards" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Hazard Layer Summary */}
+              <Card className="overflow-hidden">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Hazard Layers Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {hazardStats.map((stat, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">{stat.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {stat.featureCount} features • {stat.totalArea.toFixed(2)} km² total
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-medium">{stat.avgArea.toFixed(3)} km²</div>
+                          <div className="text-xs text-muted-foreground">avg area</div>
+                        </div>
+                      </div>
+                    ))}
+                    {hazardStats.length === 0 && (
+                      <div className="text-center text-muted-foreground py-8">
+                        No hazard data available
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Flood Risk Distribution */}
+              {hazardRiskData.flood.length > 0 && (
+                <Card className="overflow-hidden">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Flood Risk Distribution</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={hazardRiskData.flood}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            outerRadius={isMobile ? 70 : 80}
+                            fill="#8884d8"
+                            dataKey="value"
+                            label={({ name, percent }) => `${name.split(' ')[0]} ${(percent * 100).toFixed(0)}%`}
+                          >
+                            {hazardRiskData.flood.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={
+                                entry.risk === 'HF' ? '#dc2626' :
+                                entry.risk === 'MF' ? '#f59e0b' :
+                                '#10b981'
+                              } />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value: any) => [`${value} zones`, 'Count']} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Landslide Risk Distribution */}
+              {hazardRiskData.landslide.length > 0 && (
+                <Card className="overflow-hidden">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Landslide Risk Distribution</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={hazardRiskData.landslide}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            outerRadius={isMobile ? 70 : 80}
+                            fill="#8884d8"
+                            dataKey="value"
+                            label={({ name, percent }) => `${name.split(' ')[0]} ${(percent * 100).toFixed(0)}%`}
+                          >
+                            {hazardRiskData.landslide.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={
+                                entry.risk === 'VH' ? '#7f1d1d' :
+                                entry.risk === 'H' ? '#dc2626' :
+                                entry.risk === 'M' ? '#f59e0b' :
+                                '#10b981'
+                              } />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value: any) => [`${value} zones`, 'Count']} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
           <TabsContent value="advanced" className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Detection accuracy chart */}
