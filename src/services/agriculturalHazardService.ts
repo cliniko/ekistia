@@ -1,6 +1,6 @@
 import type { HazardLayerConfig } from '@/components/AgriculturalHazardLayerControl';
 
-// Hazard data URLs
+// Hazard data URLs - Vercel rewrites will serve compressed .gz files automatically
 const HAZARD_DATA_URLS = {
   flood: '/iligan_flood_hazard.geojson',
   landslide: '/iligan_landslide_hazard.geojson',

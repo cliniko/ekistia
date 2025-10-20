@@ -1,6 +1,6 @@
 import { HazardData, HazardLayer, HazardType } from '@/types';
 
-// Hazard data URLs (GeoJSON files in public directory)
+// Hazard data URLs (GeoJSON files in public directory) - Vercel rewrites serve compressed files
 const HAZARD_DATA_URLS = {
   flood: '/iligan_flood_hazard.geojson',
   landslide: '/iligan_landslide_hazard.geojson',

@@ -4,7 +4,50 @@
   "framework": "vite",
   "installCommand": "npm install",
   "devCommand": "npm run dev",
+  "rewrites": [
+    {
+      "source": "/iligan_flood_hazard.geojson",
+      "destination": "/iligan_flood_hazard.geojson.gz"
+    },
+    {
+      "source": "/iligan_landslide_hazard.geojson",
+      "destination": "/iligan_landslide_hazard.geojson.gz"
+    },
+    {
+      "source": "/iligan_safdz.geojson",
+      "destination": "/iligan_safdz.geojson.gz"
+    },
+    {
+      "source": "/iligan_slope.geojson",
+      "destination": "/iligan_slope.geojson.gz"
+    },
+    {
+      "source": "/iligan_landuse.geojson",
+      "destination": "/iligan_landuse.geojson.gz"
+    },
+    {
+      "source": "/iligan_ancestral_domain.geojson",
+      "destination": "/iligan_ancestral_domain.geojson.gz"
+    }
+  ],
   "headers": [
+    {
+      "source": "/(.*).geojson.gz",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/geo+json"
+        },
+        {
+          "key": "Content-Encoding",
+          "value": "gzip"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
     {
       "source": "/(.*).geojson",
       "headers": [
@@ -15,10 +58,6 @@
         {
           "key": "Cache-Control",
           "value": "public, max-age=31536000, immutable"
-        },
-        {
-          "key": "Content-Encoding",
-          "value": "gzip"
         }
       ]
     },
