@@ -25,6 +25,7 @@ import {
   getSlopeLayerStyle,
   getLanduseLayerStyle,
   getAncestralLayerStyle,
+  getSafdzLayerStyle,
   getHazardPopupContent
 } from '@/services/agriculturalHazardService';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -53,6 +54,11 @@ interface AgriculturalMapView3DProps {
   globalHazardOpacity?: number;
   // AI results
   aiResults?: any;
+  // Map readiness callbacks
+  onMapReady?: (isReady: boolean) => void;
+  onMap3DReady?: (isReady: boolean) => void;
+  // SAFDZ layer control (separate from hazard layers)
+  showSafdzLayer?: boolean;
 }
 
 // You'll need to get your Mapbox access token from https://mapbox.com
@@ -77,7 +83,10 @@ export const AgriculturalMapView3D = React.memo(({
   hazardLayers: externalHazardLayers,
   onHazardLayersChange,
   globalHazardOpacity: externalGlobalOpacity,
-  aiResults
+  aiResults,
+  onMapReady,
+  onMap3DReady,
+  showSafdzLayer: externalShowSafdzLayer
 }: AgriculturalMapView3DProps) => {
   const mapRef = useRef<MapRef>(null);
   const [boundariesLoaded, setBoundariesLoaded] = useState(false);
@@ -85,10 +94,11 @@ export const AgriculturalMapView3D = React.memo(({
   const [safdzData, setSafdzData] = useState<any>(null);
   const [safdzLoading, setSafdzLoading] = useState(true);
   const [safdzError, setSafdzError] = useState<string | null>(null);
-  const [showSafdzLayer, setShowSafdzLayer] = useState(true);
   const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/streets-v12');
   const [load3DFeatures, setLoad3DFeatures] = useState(false); // Defer 3D loading
   const [safdzLayersReady, setSafdzLayersReady] = useState(false); // Track SAFDZ layer rendering
+  const [isMapReady, setIsMapReady] = useState(false); // Track when basic map is loaded
+  const [isMap3DReady, setIsMap3DReady] = useState(false); // Track when 3D features are fully loaded
 
   // Hazard layers state - use external if provided, otherwise internal
   const [internalHazardLayers, setInternalHazardLayers] = useState<HazardLayerConfig[]>([]);
@@ -98,6 +108,79 @@ export const AgriculturalMapView3D = React.memo(({
   const [hazardDataLoaded, setHazardDataLoaded] = useState<Record<string, any>>({});
   const globalHazardOpacity = externalGlobalOpacity !== undefined ? externalGlobalOpacity : 0.5;
   const [hazardLayersLoading, setHazardLayersLoading] = useState(false);
+
+  // Notify parent component when map readiness changes
+  useEffect(() => {
+    if (onMapReady) {
+      onMapReady(isMapReady);
+    }
+  }, [isMapReady, onMapReady]);
+
+  // Notify parent component when 3D readiness changes
+  useEffect(() => {
+    if (onMap3DReady) {
+      onMap3DReady(isMap3DReady);
+    }
+  }, [isMap3DReady, onMap3DReady]);
+
+  // Filter application function for iligan_safdz.geojson properties
+  const applySafdzFilters = useCallback((map: any, filters: typeof currentFilters) => {
+    if (!map || !filters) return;
+
+    try {
+      const filterExpressions: any[] = ['all'];
+
+      // Filter by SAFDZ zones (using lmuCategories mapping)
+      // Map filter categories to SAFDZ codes
+      const safdzCodes: string[] = [];
+      if (filters.lmuCategories['111']) safdzCodes.push('1'); // Strategic CCP
+      if (filters.lmuCategories['112']) safdzCodes.push('2'); // Strategic Livestock
+      if (filters.lmuCategories['113']) safdzCodes.push('3'); // Strategic Fishery
+      if (filters.lmuCategories['117']) safdzCodes.push('8'); // NIPAS
+
+      // Add common zones if any category is enabled
+      if (safdzCodes.length > 0) {
+        // Also include variations (e.g., "1 / BU", "2 / BU")
+        safdzCodes.push('9', '10', 'BU', 'WB', 'Others');
+      }
+
+      if (safdzCodes.length > 0) {
+        filterExpressions.push(['in', ['get', 'SAFDZ'], ['literal', safdzCodes]]);
+      }
+
+      // Filter by municipality/barangay search
+      if (filters.searchBarangay) {
+        filterExpressions.push([
+          'in',
+          filters.searchBarangay.toLowerCase(),
+          ['downcase', ['get', 'Mun_Name']]
+        ]);
+      }
+
+      // Filter by selected municipalities
+      if (filters.selectedBarangays && filters.selectedBarangays.length > 0) {
+        filterExpressions.push([
+          'in',
+          ['get', 'Mun_Name'],
+          ['literal', filters.selectedBarangays]
+        ]);
+      }
+
+      // Apply filter (if we have any conditions beyond 'all')
+      const finalFilter = filterExpressions.length > 1 ? filterExpressions : ['has', 'SAFDZ'];
+
+      if (map.getLayer('safdz-fill')) {
+        map.setFilter('safdz-fill', finalFilter);
+      }
+      if (map.getLayer('safdz-outline')) {
+        map.setFilter('safdz-outline', finalFilter);
+      }
+
+      console.log('✅ SAFDZ filters applied');
+    } catch (error) {
+      console.error('❌ Failed to apply SAFDZ filters:', error);
+    }
+  }, []);
 
 
   // Default filters if not provided
@@ -252,7 +335,11 @@ export const AgriculturalMapView3D = React.memo(({
     setSafdzLoading(true);
     setSafdzError(null);
 
-    fetch('/iligan_safdz.geojson')
+    fetch('/iligan_safdz.geojson', {
+      headers: {
+        'Accept-Encoding': 'gzip, deflate'
+      }
+    })
       .then(response => {
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -281,47 +368,69 @@ export const AgriculturalMapView3D = React.memo(({
       });
   }, [externalSafdzData]);
 
-  // Load hazard layers data in parallel for better performance
+  // Initialize hazard layers (metadata only, no data loading)
   useEffect(() => {
     const loadHazardLayers = async () => {
       try {
-        setHazardLayersLoading(true);
-
         const layers = await initializeHazardLayers();
         setHazardLayers(layers);
-
-        // Load all hazard data in parallel instead of sequentially
-        const hazardDataPromises = layers.map(async (layer) => {
-          try {
-            const data = await loadHazardData(layer.id as any);
-            return { id: layer.id, data };
-          } catch (error) {
-            console.error(`❌ Failed to load ${layer.id}:`, error);
-            return { id: layer.id, data: null };
-          }
-        });
-
-        // Wait for all hazard data to load in parallel
-        const results = await Promise.all(hazardDataPromises);
-
-        // Convert results to hazardData object
-        const hazardData: Record<string, any> = {};
-        results.forEach(result => {
-          if (result.data) {
-            hazardData[result.id] = result.data;
-          }
-        });
-
-        setHazardDataLoaded(hazardData);
       } catch (error) {
-        console.error('❌ Failed to load hazard layers:', error);
-      } finally {
-        setHazardLayersLoading(false);
+        console.error('❌ Failed to initialize hazard layers:', error);
       }
     };
 
     loadHazardLayers();
   }, []);
+
+  // Load hazard data on-demand when a layer is first enabled
+  useEffect(() => {
+    const loadEnabledHazardData = async () => {
+      for (const layer of hazardLayers) {
+        // Only load data for enabled layers that haven't been loaded yet
+        if (layer.enabled && !hazardDataLoaded[layer.id]) {
+          try {
+            console.log(`📥 Loading ${layer.name} data on-demand...`);
+            const data = await loadHazardData(layer.id as any);
+            
+            setHazardDataLoaded(prev => ({
+              ...prev,
+              [layer.id]: data
+            }));
+
+            console.log(`✅ ${layer.name} loaded: ${data.features.length} features`);
+          } catch (error) {
+            console.error(`❌ Failed to load ${layer.id}:`, error);
+          }
+        }
+      }
+    };
+
+    loadEnabledHazardData();
+  }, [hazardLayers]);
+
+  // Handle SAFDZ layer separately (controlled by external floating toggle)
+  useEffect(() => {
+    if (!externalShowSafdzLayer || hazardDataLoaded['safdz']) return;
+
+    const loadSafdzData = async () => {
+      try {
+        console.log('📥 Loading SAFDZ data on-demand...');
+        const data = await loadHazardData('safdz');
+
+        setHazardDataLoaded(prev => ({
+          ...prev,
+          safdz: data
+        }));
+
+        // Update SAFDZ data state
+        setSafdzData(data);
+      } catch (error) {
+        console.error('❌ Failed to load SAFDZ data:', error);
+      }
+    };
+
+    loadSafdzData();
+  }, [externalShowSafdzLayer]);
 
   // Auto-collapse legend after initial load
   useEffect(() => {
@@ -441,61 +550,19 @@ export const AgriculturalMapView3D = React.memo(({
     });
   }, [hazardLayers, hazardDataLoaded]);
 
-  // Update SAFDZ filters when they change
+  // Apply SAFDZ filters when they change
   useEffect(() => {
-    // Temporarily disabled for testing basic layer visibility
-    // if (!mapRef.current || !safdzData || safdzLoading || safdzError) return;
-    //
-    // const map = mapRef.current.getMap();
-    //
-    // // Update filters for all SAFDZ layers (labels disabled)
-    // const layers = ['safdz-fill', 'safdz-outline'];
-    // layers.forEach(layerId => {
-    //   if (map.getLayer(layerId)) {
-    //     map.setFilter(layerId, ['all',
-    //       // Size category filter
-    //       ['any',
-    //         ['all', ['>=', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.large], true]],
-    //         ['all', ['>=', ['get', 'HECTARES'], 50], ['<', ['get', 'HECTARES'], 100], ['==', ['literal', currentFilters.sizeCategories.medium], true]],
-    //         ['all', ['>=', ['get', 'HECTARES'], 20], ['<', ['get', 'HECTARES'], 50], ['==', ['literal', currentFilters.sizeCategories.small], true]],
-    //         ['all', ['<', ['get', 'HECTARES'], 20], ['==', ['literal', currentFilters.sizeCategories.micro], true]]
-    //       ],
-    //       // Hectare range filter
-    //       ['>=', ['get', 'HECTARES'], currentFilters.minHectares],
-    //       ['<=', ['get', 'HECTARES'], currentFilters.maxHectares],
-    //       // LMU category filter
-    //       ['any',
-    //         ['all', ['==', ['get', 'LMU_CODE'], '111'], ['==', ['literal', currentFilters.lmuCategories['111']], true]],
-    //         ['all', ['==', ['get', 'LMU_CODE'], '112'], ['==', ['literal', currentFilters.lmuCategories['112']], true]],
-    //         ['all', ['==', ['get', 'LMU_CODE'], '113'], ['==', ['literal', currentFilters.lmuCategories['113']], true]],
-    //         ['all', ['==', ['get', 'LMU_CODE'], '117'], ['==', ['literal', currentFilters.lmuCategories['117']], true]]
-    //       ],
-    //       // Zoning filter
-    //       ['any',
-    //         ['all', ['==', ['get', 'ZONING'], 'Strategic Agriculture'], ['==', ['literal', currentFilters.zoningTypes['Strategic Agriculture']], true]]
-    //       ],
-    //       // Land use filter
-    //       ['any',
-    //         ['all', ['==', ['get', 'LANDUSE'], 'Agriculture'], ['==', ['literal', currentFilters.landUseTypes['Agriculture']], true]]
-    //       ],
-    //       // Class filter
-    //       ['any',
-    //         ['all', ['==', ['get', 'CLASS'], 'rural'], ['==', ['literal', currentFilters.classTypes['rural']], true]]
-    //       ],
-    //       // Barangay filter (if any selected)
-    //       currentFilters.selectedBarangays.length > 0
-    //         ? ['in', ['get', 'BRGY'], ['literal', currentFilters.selectedBarangays]]
-    //         : ['literal', true],
-    //       // Search filter
-    //       currentFilters.searchBarangay
-    //         ? ['in', currentFilters.searchBarangay.toLowerCase(), ['downcase', ['get', 'BRGY']]]
-    //         : ['literal', true]
-    //     ]);
-    //   }
-    // });
-    //
-    // console.log('✅ SAFDZ filters updated:', currentFilters);
-  }, [currentFilters, safdzData, externalSafdzFilters]);
+    if (!mapRef.current || !safdzData || safdzLoading || safdzError) return;
+
+    const map = mapRef.current.getMap();
+    
+    // Apply filters after a small delay to ensure layers are ready
+    const timer = setTimeout(() => {
+      applySafdzFilters(map, currentFilters);
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [currentFilters, safdzData, safdzLoading, safdzError, applySafdzFilters]);
 
   // Mapbox Boundaries are loaded after map is ready
   useEffect(() => {
@@ -565,7 +632,7 @@ export const AgriculturalMapView3D = React.memo(({
         layers: ['safdz-fill']
       });
 
-      if (safdzFeatures && safdzFeatures.length > 0 && showSafdzLayer) {
+      if (safdzFeatures && safdzFeatures.length > 0 && externalShowSafdzLayer) {
         const feature = safdzFeatures[0];
         const props = feature.properties;
 
@@ -609,16 +676,25 @@ export const AgriculturalMapView3D = React.memo(({
         }
       }
     }
-  }, [findMatchingBarangay, onSelectBarangay, getMapboxFeatureBarangayName, showSafdzLayer]);
+  }, [findMatchingBarangay, onSelectBarangay, getMapboxFeatureBarangayName, externalShowSafdzLayer]);
 
   // Add SAFDZ layers to map (when data is loaded or map style changes)
   useEffect(() => {
     const map = mapRef.current?.getMap();
-    if (!map || !safdzData || safdzLoading || safdzError || !boundariesLoaded) return;
+    // Don't wait for boundaries - SAFDZ can load independently
+    if (!map || !safdzData || safdzLoading || safdzError) return;
+    
+    console.log('🎯 SAFDZ useEffect triggered - attempting to add layers');
 
     const addSafdzLayers = () => {
-      // Ensure map is fully loaded before adding layers
+      // Ensure map style is loaded before adding layers; if not, wait once
       if (!map.isStyleLoaded()) {
+        const onStyleReady = () => {
+          // Remove listener to avoid duplicate calls
+          map.off('styledata', onStyleReady);
+          addSafdzLayers();
+        };
+        map.on('styledata', onStyleReady);
         return;
       }
 
@@ -632,13 +708,23 @@ export const AgriculturalMapView3D = React.memo(({
 
         // Add GeoJSON source
         console.log('🗺️ Adding SAFDZ source with', safdzData.features.length, 'features');
+        console.log('🗺️ Map style loaded:', map.isStyleLoaded());
+        console.log('🗺️ Existing layers:', map.getStyle()?.layers?.map(l => l.id));
+
         map.addSource('safdz-zones', {
           type: 'geojson',
           data: safdzData
         });
 
+        console.log('✅ SAFDZ source added successfully');
+
+        // Find first symbol layer to insert SAFDZ layers before it
+        const firstSymbolLayer = map.getStyle().layers?.find(layer => layer.type === 'symbol');
+        const beforeLayerId = firstSymbolLayer?.id;
+        console.log('🎯 Inserting SAFDZ layers before:', beforeLayerId || 'top');
+
         // Add fill layer with hectare-based categorization and filtering
-        // Add it without specifying beforeId to ensure it renders on top
+        // Add it before 3D buildings to ensure proper layering
         map.addLayer({
           id: 'safdz-fill',
           type: 'fill',
@@ -706,26 +792,32 @@ export const AgriculturalMapView3D = React.memo(({
               ['in', '9', ['get', 'SAFDZ']], '#FF8C00',
               '#DCDCDC'                                        // Default - Others - Gainsboro
             ],
-            'fill-opacity': 0.5, // Moderate opacity for balanced visibility
+            'fill-opacity': 0.7, // Increased opacity for better visibility during debugging
             'fill-antialias': true // Smooth edges for better visuals
-          }
-        });
-        
-        console.log('✅ SAFDZ fill layer added to map');
-
-        // Add a simple test layer without filters to verify data is rendering
-        map.addLayer({
-          id: 'safdz-fill-test',
-          type: 'fill',
-          source: 'safdz-zones',
-          paint: {
-            'fill-color': '#ff0000',
-            'fill-opacity': 0.5
           },
           layout: {
-            'visibility': 'none' // Hidden - using proper colored layers now
+            'visibility': 'visible'
           }
-        });
+        }, beforeLayerId); // Add before symbol layers so labels appear on top
+
+        console.log('✅ SAFDZ fill layer added to map');
+        console.log('🗺️ SAFDZ fill layer exists:', map.getLayer('safdz-fill') ? 'YES' : 'NO');
+        console.log('🗺️ SAFDZ source exists:', map.getSource('safdz-zones') ? 'YES' : 'NO');
+        
+        // Force visibility and check if features are being rendered
+        if (map.getLayer('safdz-fill')) {
+          map.setLayoutProperty('safdz-fill', 'visibility', 'visible');
+          const renderedFeatures = map.querySourceFeatures('safdz-zones');
+          console.log('🎨 Rendered SAFDZ features:', renderedFeatures.length);
+        }
+
+        // PROGRESSIVE LOADING: Apply complex filters after initial render
+        // This prevents the heavy filter computation from blocking the initial display
+        // TEMPORARILY DISABLED to debug visualization issues
+        // setTimeout(() => {
+        //   console.log('🔄 Applying SAFDZ filters progressively...');
+        //   applySafdzFilters(map, currentFilters);
+        // }, 200); // Allow initial render to complete first
 
         // Make map available globally for debugging
         (window as any).map = map;
@@ -798,17 +890,32 @@ export const AgriculturalMapView3D = React.memo(({
               ['in', '9', ['get', 'SAFDZ']], '#D2691E',
               '#696969'                                        // Default - Dim Gray
             ],
-            'line-width': 1.5, // Constant line width for visibility
-            'line-opacity': 0.7 // Moderate opacity for clear boundaries
+            'line-width': 2.0, // Increased width for better visibility during debugging
+            'line-opacity': 0.9 // Increased opacity for clear boundaries
+          },
+          layout: {
+            'visibility': 'visible'
           }
-        });
-        
+        }, beforeLayerId); // Add before symbol layers
+
         console.log('✅ SAFDZ outline layer added to map');
         
-        // Mark SAFDZ layers as ready and trigger 3D feature loading after a short delay
+        // Force visibility for outline layer
+        if (map.getLayer('safdz-outline')) {
+          map.setLayoutProperty('safdz-outline', 'visibility', 'visible');
+        }
+
+        // Mark SAFDZ layers as ready (3D features are now loaded via handleMapLoad)
         setSafdzLayersReady(true);
-        // Load 3D features immediately since terrain and buildings should be visible regardless of SAFDZ
-        setLoad3DFeatures(true);
+        
+        // Log current viewport to help debug if features are in view
+        const bounds = map.getBounds();
+        console.log('🗺️ Map bounds:', {
+          north: bounds.getNorth().toFixed(4),
+          south: bounds.getSouth().toFixed(4),
+          east: bounds.getEast().toFixed(4),
+          west: bounds.getWest().toFixed(4)
+        });
 
         // Labels layer disabled - not showing barangay names and hectare sizes yet
         // Uncomment when labels are needed
@@ -874,45 +981,49 @@ export const AgriculturalMapView3D = React.memo(({
         */
       } catch (error) {
         console.error('❌ Failed to add SAFDZ layers:', error);
+        console.error('❌ Error details:', error instanceof Error ? error.message : error);
+        console.error('❌ Map has style:', map.getStyle() !== undefined);
+        console.error('❌ Style loaded:', map.isStyleLoaded());
       }
     };
 
-    // Add layers with multiple fallback mechanisms
-    let layersAdded = false;
-
-    const tryAddLayers = () => {
-      if (!layersAdded && map.isStyleLoaded()) {
-        addSafdzLayers();
-        layersAdded = true;
+    // Wait for both map and style to be fully loaded before adding layers
+    const waitForMapReady = () => {
+      // First wait for map to be loaded
+      if (!map.loaded()) {
+        console.log('⏳ Waiting for map to load...');
+        map.once('load', () => {
+          waitForStyleReady();
+        });
+        return;
       }
+
+      waitForStyleReady();
     };
 
-    // Try immediately if style is already loaded
-    if (map.isStyleLoaded()) {
-      tryAddLayers();
-    }
-
-    // Also listen for style.load event (in case style wasn't loaded yet)
-    const onStyleLoad = () => {
-      tryAddLayers();
-    };
-    map.on('style.load', onStyleLoad);
-
-    // Additional fallback: try again after a short delay
-    const fallbackTimer = setTimeout(() => {
-      if (!layersAdded) {
-        console.log('⚠️ Using fallback to add SAFDZ layers');
-        tryAddLayers();
+    const waitForStyleReady = () => {
+      // Then wait for style to be loaded
+      if (!map.isStyleLoaded()) {
+        console.log('⏳ Waiting for map style to load...');
+        map.once('style.load', () => {
+          console.log('✅ Map and style are both ready - adding SAFDZ layers');
+          addSafdzLayers();
+        });
+        return;
       }
-    }, 500);
+
+      // Both map and style are ready
+      console.log('✅ Map and style are both ready - adding SAFDZ layers');
+      addSafdzLayers();
+    };
+
+    // Start the waiting process
+    waitForMapReady();
 
     return () => {
-      map.off('style.load', onStyleLoad);
-      clearTimeout(fallbackTimer);
       // Cleanup layers when component unmounts
       if (map && map.getStyle()) {
         try {
-          // if (map.getLayer('safdz-labels')) map.removeLayer('safdz-labels'); // Labels disabled
           if (map.getLayer('safdz-outline')) map.removeLayer('safdz-outline');
           if (map.getLayer('safdz-fill')) map.removeLayer('safdz-fill');
           if (map.getSource('safdz-zones')) map.removeSource('safdz-zones');
@@ -921,35 +1032,8 @@ export const AgriculturalMapView3D = React.memo(({
         }
       }
     };
-  }, [safdzData, mapStyle, boundariesLoaded]); // Re-add layers when data, map style, or boundaries change
+  }, [safdzData, mapStyle]); // Re-add layers when data or map style changes (removed boundariesLoaded dependency)
 
-  // Update SAFDZ layer visibility when toggle changes
-  useEffect(() => {
-    const map = mapRef.current?.getMap();
-    if (!map || !safdzData || safdzLoading || safdzError) return;
-
-    const updateVisibility = () => {
-      const visibility = showSafdzLayer ? 'visible' : 'none';
-
-      try {
-        if (map.getLayer('safdz-fill')) {
-          map.setLayoutProperty('safdz-fill', 'visibility', visibility);
-        }
-        if (map.getLayer('safdz-outline')) {
-          map.setLayoutProperty('safdz-outline', 'visibility', visibility);
-        }
-        // Labels disabled - not showing barangay names and hectare sizes yet
-        // if (map.getLayer('safdz-labels')) {
-        //   map.setLayoutProperty('safdz-labels', 'visibility', visibility);
-        // }
-      } catch (error) {
-        console.error('Error updating SAFDZ visibility:', error);
-      }
-    };
-
-    // Update visibility immediately
-    updateVisibility();
-  }, [showSafdzLayer, safdzData, safdzLoading, safdzError]);
 
   // Handle AI results - highlight matching SAFDZ zones in blue
   useEffect(() => {
@@ -1097,10 +1181,14 @@ export const AgriculturalMapView3D = React.memo(({
     };
   }, [aiResults, safdzData]);
 
-  // Add 3D terrain when map loads (deferred for better initial performance)
+  // Handle minimal map load setup (defer heavy 3D operations)
   const handleMapLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
+
+    // Mark basic map as ready (loading screen can hide now)
+    setIsMapReady(true);
+    console.log('✅ Basic map loaded and ready');
 
     // Hide most labels but keep barangay names visible
     const hideLabels = () => {
@@ -1118,106 +1206,117 @@ export const AgriculturalMapView3D = React.memo(({
     // Hide labels immediately and also on style load
     hideLabels();
     map.on('style.load', hideLabels);
+
+    // CRITICAL: Defer 3D features to AFTER SAFDZ layers are ready
+    // This prevents blocking SAFDZ loading
+    setTimeout(() => {
+      console.log('🕒 Starting deferred 3D feature loading...');
+      setLoad3DFeatures(true);
+    }, 100); // Small delay to ensure SAFDZ has started loading
   }, []);
 
-  // Add 3D features immediately when map is ready
-  useEffect(() => {
-    const map = mapRef.current?.getMap();
-    if (!map || !map.isStyleLoaded()) return;
-
-    // Load 3D features immediately for better initial experience
-    setLoad3DFeatures(true);
-  }, []); // Run once on mount
+  // 3D features are now enabled via handleMapLoad after SAFDZ layers
 
   // Add 3D features after SAFDZ layers are rendered (deferred loading)
   useEffect(() => {
     if (!load3DFeatures) return;
 
     const map = mapRef.current?.getMap();
-    if (!map || !map.isStyleLoaded()) return;
+    const add3DFeatures = () => {
+      if (!map.isStyleLoaded()) return;
+      try {
+        // Add terrain source for 3D elevation
+        if (!map.getSource('mapbox-dem')) {
+          map.addSource('mapbox-dem', {
+            type: 'raster-dem',
+            url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+            tileSize: 512,
+            maxzoom: 14
+          });
+        }
 
-    try {
-      // Add terrain source for 3D elevation
-      if (!map.getSource('mapbox-dem')) {
-        map.addSource('mapbox-dem', {
-          type: 'raster-dem',
-          url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-          tileSize: 512,
-          maxzoom: 14
+        // Set the terrain with proper exaggeration for visibility
+        map.setTerrain({
+          source: 'mapbox-dem',
+          exaggeration: [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            10, 2.0,
+            14, 1.8,
+            18, 1.2
+          ]
         });
-      }
 
-      // Set the terrain with proper exaggeration for visibility
-      map.setTerrain({
-        source: 'mapbox-dem',
-        exaggeration: [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          10, 2.0,  // Increased for better mountain visibility
-          14, 1.8,  // Increased from 1.2
-          18, 1.2   // Increased from 0.8
-        ]
-      });
+        // Add 3D buildings layer with better visibility settings
+        if (!map.getLayer('3d-buildings')) {
+          map.addLayer({
+            id: '3d-buildings',
+            source: 'composite',
+            'source-layer': 'building',
+            filter: ['==', 'extrude', 'true'],
+            type: 'fill-extrusion',
+            minzoom: 13,
+            paint: {
+              'fill-extrusion-color': [
+                'interpolate',
+                ['linear'],
+                ['get', 'height'],
+                0, '#e0e0e0',
+                50, '#c0c0c0',
+                100, '#a0a0a0',
+                200, '#808080'
+              ],
+              'fill-extrusion-height': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                13, 0,
+                13.5, ['*', ['get', 'height'], 0.5],
+                16, ['*', ['get', 'height'], 1.0]
+              ],
+              'fill-extrusion-base': ['get', 'min_height'],
+              'fill-extrusion-opacity': 0.8,
+              'fill-extrusion-vertical-gradient': true
+            }
+          });
+        }
 
-      // Add 3D buildings layer with better visibility settings
-      if (!map.getLayer('3d-buildings')) {
-        map.addLayer({
-          id: '3d-buildings',
-          source: 'composite',
-          'source-layer': 'building',
-          filter: ['==', 'extrude', 'true'],
-          type: 'fill-extrusion',
-          minzoom: 13, // Reduced from 15 - buildings visible at reasonable zoom
-          paint: {
-            // More realistic building color
-            'fill-extrusion-color': [
-              'interpolate',
-              ['linear'],
-              ['get', 'height'],
-              0, '#e0e0e0',     // Light gray for low buildings
-              50, '#c0c0c0',    // Medium gray
-              100, '#a0a0a0',   // Darker gray for tall buildings
-              200, '#808080'    // Dark gray for very tall buildings
-            ],
-            // Better height scaling for visibility
-            'fill-extrusion-height': [
-              'interpolate',
-              ['linear'],
-              ['zoom'],
-              13, 0,
-              13.5, ['*', ['get', 'height'], 0.5], // Increased from 0.3
-              16, ['*', ['get', 'height'], 1.0]     // Increased from 0.6
-            ],
-            'fill-extrusion-base': ['get', 'min_height'],
-            // Increased opacity for better visibility
-            'fill-extrusion-opacity': 0.8, // Increased from 0.6
-            // Enable vertical gradient for more realistic look
-            'fill-extrusion-vertical-gradient': true
-          }
+        // Enhanced fog for better atmosphere
+        map.setFog({
+          color: 'rgb(240, 248, 255)',
+          'high-color': 'rgb(180, 200, 230)',
+          'horizon-blend': 0.2,
+          'space-color': 'rgb(70, 80, 100)',
+          'star-intensity': 0.0,
+          range: [2, 12]
         });
+
+        // Enhanced lighting for better building definition
+        map.setLight({
+          anchor: 'viewport',
+          color: 'white',
+          intensity: 0.5,
+          position: [1, 90, 45]
+        });
+
+        // Mark 3D features as ready
+        setIsMap3DReady(true);
+        console.log('✅ 3D features fully loaded');
+      } catch (error) {
+        console.error('❌ Failed to add 3D features:', error);
+        // Even on error, we should not block the loading screen indefinitely
+        setIsMap3DReady(true);
       }
+    };
 
-      // Enhanced fog for better atmosphere
-      map.setFog({
-        color: 'rgb(240, 248, 255)', // Light blue sky color
-        'high-color': 'rgb(180, 200, 230)', // Medium blue for horizon
-        'horizon-blend': 0.2, // Better blending
-        'space-color': 'rgb(70, 80, 100)', // Darker space color
-        'star-intensity': 0.0, // Keep stars disabled
-        range: [2, 12] // Extended range for better effect
-      });
+    // Add immediately and also whenever the style reloads (e.g. style switch)
+    add3DFeatures();
+    map.on('style.load', add3DFeatures);
 
-      // Enhanced lighting for better building definition
-      map.setLight({
-        anchor: 'viewport',
-        color: 'white',
-        intensity: 0.5, // Increased from 0.3 for better visibility
-        position: [1, 90, 45] // Better angle for shadows
-      });
-    } catch (error) {
-      console.error('❌ Failed to add 3D features:', error);
-    }
+    return () => {
+      map.off('style.load', add3DFeatures as any);
+    };
   }, [load3DFeatures]);
 
   // Fill layer configuration for Mapbox Boundaries v4.5
@@ -1326,19 +1425,6 @@ export const AgriculturalMapView3D = React.memo(({
           {!isLegendExpanded ? (
             /* Compact View - Just color dots */
             <div className="p-3 flex items-center gap-2 flex-wrap max-w-[200px]">
-              {/* SAFDZ Classification Colors */}
-              {showSafdzLayer && (
-                <>
-                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#7CFC00' }} title="Strategic CCP Zone"></div>
-                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#8B4789' }} title="Strategic Livestock Zone"></div>
-                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#87CEEB' }} title="Strategic Fishery Zone"></div>
-                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#DA70D6' }} title="NIPAS"></div>
-                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#FF8C00' }} title="Rangelands/PAAD"></div>
-                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#228B22' }} title="Sub-watershed/Forestry"></div>
-                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#A9A9A9' }} title="Built-Up Areas"></div>
-                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#1E90FF' }} title="Water Bodies"></div>
-                </>
-              )}
 
               {/* Hazard Colors - only show if hazards are enabled */}
               {hazardLayers.find(l => l.id === 'flood' && l.enabled) && (
@@ -1355,6 +1441,9 @@ export const AgriculturalMapView3D = React.memo(({
               )}
               {hazardLayers.find(l => l.id === 'ancestral' && l.enabled) && (
                 <div className="w-3 h-3 rounded" style={{ backgroundColor: '#8b5cf6' }} title="Ancestral Domain"></div>
+              )}
+              {externalShowSafdzLayer && (
+                <div className="w-3 h-3 rounded" style={{ backgroundColor: '#7CFC00' }} title="SAFDZ Zones"></div>
               )}
             </div>
           ) : (
@@ -1474,85 +1563,48 @@ export const AgriculturalMapView3D = React.memo(({
                     )}
 
                     {/* Ancestral Domain Legend */}
-                    {hazardLayers.find(l => l.id === 'ancestral' && l.enabled) && (
-                      <div className="space-y-1">
-                        <div className="text-xs font-medium text-purple-700">🏞️ Ancestral Domain</div>
-                        <div className="flex items-center space-x-1">
-                          <div className="w-2 h-2 rounded" style={{ backgroundColor: '#8b5cf6' }}></div>
-                          <span className="text-xs">Protected Areas</span>
-                        </div>
-                      </div>
-                    )}
+              {hazardLayers.find(l => l.id === 'ancestral' && l.enabled) && (
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-purple-700">🏞️ Ancestral Domain</div>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 rounded" style={{ backgroundColor: '#8b5cf6' }}></div>
+                    <span className="text-xs">Protected Areas</span>
                   </div>
                 </div>
               )}
 
-              {/* SAFDZ Layer Toggle and Info */}
-              {safdzData && (
-                <div className={hazardLayers.some(layer => layer.enabled) ? "mt-4 pt-4 border-t border-border" : ""}>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-semibold text-foreground">🌾 SAFDZ Zones</span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowSafdzLayer(!showSafdzLayer);
-                      }}
-                      className="px-2 py-1 text-xs rounded bg-muted hover:bg-muted/80 transition-colors"
-                    >
-                      {showSafdzLayer ? 'Hide' : 'Show'}
-                    </button>
                   </div>
-                  
-                  {showSafdzLayer && (
-                    <div className="space-y-3">
-                      {/* SAFDZ Classifications */}
-                      <div className="space-y-1">
-                        <div className="text-xs font-medium text-green-700 mb-1">SAFDZ Classifications</div>
-                        <div className="grid grid-cols-1 gap-1.5 max-h-60 overflow-y-auto pr-1">
-                          <div className="flex items-center space-x-2 group hover:bg-gray-50 px-1 py-0.5 rounded transition-colors">
-                            <div className="w-4 h-4 rounded flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: '#7CFC00' }}></div>
-                            <span className="text-xs text-foreground leading-tight">Strategic CCP Sub-development Zone</span>
-                          </div>
-                          <div className="flex items-center space-x-2 group hover:bg-gray-50 px-1 py-0.5 rounded transition-colors">
-                            <div className="w-4 h-4 rounded flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: '#8B4789' }}></div>
-                            <span className="text-xs text-foreground leading-tight">Strategic Livestock Sub-development Zone</span>
-                          </div>
-                          <div className="flex items-center space-x-2 group hover:bg-gray-50 px-1 py-0.5 rounded transition-colors">
-                            <div className="w-4 h-4 rounded flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: '#87CEEB' }}></div>
-                            <span className="text-xs text-foreground leading-tight">Strategic Fishery Sub-development Zone</span>
-                          </div>
-                          <div className="flex items-center space-x-2 group hover:bg-gray-50 px-1 py-0.5 rounded transition-colors">
-                            <div className="w-4 h-4 rounded flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: '#DA70D6' }}></div>
-                            <span className="text-xs text-foreground leading-tight">NIPAS (Protected Areas)</span>
-                          </div>
-                          <div className="flex items-center space-x-2 group hover:bg-gray-50 px-1 py-0.5 rounded transition-colors">
-                            <div className="w-4 h-4 rounded flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: '#FF8C00' }}></div>
-                            <span className="text-xs text-foreground leading-tight">Rangelands/PAAD</span>
-                          </div>
-                          <div className="flex items-center space-x-2 group hover:bg-gray-50 px-1 py-0.5 rounded transition-colors">
-                            <div className="w-4 h-4 rounded flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: '#228B22' }}></div>
-                            <span className="text-xs text-foreground leading-tight">Sub-watershed/Forestry Zone</span>
-                          </div>
-                          <div className="flex items-center space-x-2 group hover:bg-gray-50 px-1 py-0.5 rounded transition-colors">
-                            <div className="w-4 h-4 rounded flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: '#A9A9A9' }}></div>
-                            <span className="text-xs text-foreground leading-tight">Built-Up Areas</span>
-                          </div>
-                          <div className="flex items-center space-x-2 group hover:bg-gray-50 px-1 py-0.5 rounded transition-colors">
-                            <div className="w-4 h-4 rounded flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: '#1E90FF' }}></div>
-                            <span className="text-xs text-foreground leading-tight">Water Bodies</span>
-                          </div>
-                        </div>
-                      </div>
+                </div>
+              )}
 
-                      {/* Additional Info */}
-                      <div className="text-xs text-muted-foreground pt-2 border-t border-border">
-                        <div className="font-medium mb-1">Strategic Agriculture & Fisheries Development Zones</div>
-                        <div className="text-xs">Based on DENR/DA-BSWM land classification</div>
+              {/* SAFDZ Legend */}
+              {externalShowSafdzLayer && (
+                <div>
+                  <div className="text-xs font-semibold text-foreground mb-3">🌱 SAFDZ Zones</div>
+                  <div className="space-y-1">
+                    <div className="text-xs font-medium text-green-700">Strategic Agriculture & Fisheries Development</div>
+                    <div className="grid grid-cols-2 gap-1">
+                      <div className="flex items-center space-x-1">
+                        <div className="w-2 h-2 rounded" style={{ backgroundColor: '#7CFC00' }}></div>
+                        <span className="text-xs">CCP Zone</span>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <div className="w-2 h-2 rounded" style={{ backgroundColor: '#8B4789' }}></div>
+                        <span className="text-xs">Livestock</span>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <div className="w-2 h-2 rounded" style={{ backgroundColor: '#87CEEB' }}></div>
+                        <span className="text-xs">Fishery</span>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <div className="w-2 h-2 rounded" style={{ backgroundColor: '#DA70D6' }}></div>
+                        <span className="text-xs">NIPAS</span>
                       </div>
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
+
 
               {/* 3D Controls Info */}
               <div className="mt-4 pt-4 border-t border-border">
@@ -1758,8 +1810,8 @@ export const AgriculturalMapView3D = React.memo(({
                             }
                           });
 
-                          // Update visibility based on current state
-                          const visibility = showSafdzLayer ? 'visible' : 'none';
+                          // Update visibility based on external SAFDZ toggle
+                          const visibility = externalShowSafdzLayer ? 'visible' : 'none';
                           if (map.getLayer('safdz-fill')) {
                             map.setLayoutProperty('safdz-fill', 'visibility', visibility);
                           }

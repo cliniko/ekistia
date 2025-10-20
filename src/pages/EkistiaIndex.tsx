@@ -10,7 +10,6 @@ import LoadingScreen from '@/components/LoadingScreen';
 import type { HazardLayerConfig } from '@/components/AgriculturalHazardLayerControl';
 import { barangayData } from '@/data/barangayData';
 import { Barangay, CropType } from '@/types/agricultural';
-import { getSafdzData, getSafdzDataSync, isSafdzDataLoaded } from '@/services/safdzDataService';
 
 const EkistiaIndex = React.memo(() => {
   const [barangays] = useState<Barangay[]>(barangayData);
@@ -46,48 +45,27 @@ const EkistiaIndex = React.memo(() => {
     }
   });
   const [showSafdzFilters, setShowSafdzFilters] = useState(false);
-  const [safdzData, setSafdzData] = useState<{ features: any[] } | null>(getSafdzDataSync());
   const [showMapAnalytics, setShowMapAnalytics] = useState(false);
   const [showHazardsPanel, setShowHazardsPanel] = useState(false);
   const [showCollectPanel, setShowCollectPanel] = useState(false);
   const [aiResults, setAiResults] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isMapReady, setIsMapReady] = useState(false);
 
   // Hazard layers state
   const [hazardLayers, setHazardLayers] = useState<HazardLayerConfig[]>([]);
   const [globalHazardOpacity, setGlobalHazardOpacity] = useState(0.5);
+  const [showSafdzLayer, setShowSafdzLayer] = useState(false);
 
-  // Load SAFDZ data using the pre-loader service
+
+  // SAFDZ data is now loaded on-demand by the hazard layer system
+
+  // Hide loading screen when basic map is ready (hazards load on-demand now)
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        // Check if data is already loaded synchronously
-        if (isSafdzDataLoaded()) {
-          const data = getSafdzDataSync();
-          setSafdzData(data);
-
-          // Add minimum loading time for better UX (1.5 seconds)
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          setIsLoading(false);
-          return;
-        }
-
-        // Otherwise, wait for it to load
-        const data = await getSafdzData();
-        setSafdzData(data);
-
-        // Add minimum loading time for better UX (1.5 seconds)
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        setIsLoading(false);
-      } catch (error) {
-        console.error('❌ Failed to load SAFDZ data:', error);
-        // Still hide loading screen even on error
-        setIsLoading(false);
-      }
-    };
-
-    loadData();
-  }, []);
+    if (isMapReady) {
+      setIsLoading(false);
+    }
+  }, [isMapReady]);
 
   // Memoize summary statistics
   const summaryStats = useMemo(() => ({
@@ -99,6 +77,11 @@ const EkistiaIndex = React.memo(() => {
 
   const handleSelectBarangay = useCallback((barangay: Barangay) => {
     setSelectedBarangay(barangay);
+  }, []);
+
+  // Handle map 3D readiness
+  const handleMap3DReady = useCallback((isReady: boolean) => {
+    setIsMap3DReady(isReady);
   }, []);
 
   // Hazard layer handlers
@@ -150,18 +133,18 @@ const EkistiaIndex = React.memo(() => {
         selectedCrop={selectedCrop}
         onSelectBarangay={handleSelectBarangay}
         currentFilters={safdzFilters}
-        safdzData={safdzData}
         hazardLayers={hazardLayers}
         onHazardLayersChange={setHazardLayers}
         globalHazardOpacity={globalHazardOpacity}
         aiResults={aiResults}
+        onMapReady={setIsMapReady}
+        showSafdzLayer={showSafdzLayer}
       />
 
       {/* Ekistia Header */}
       <EkistiaHeader
         safdzFilters={safdzFilters}
         onSafdzFiltersChange={setSafdzFilters}
-        safdzData={safdzData}
         showSafdzFilters={showSafdzFilters}
         toggleSafdzFilters={() => setShowSafdzFilters(!showSafdzFilters)}
         showMapAnalytics={showMapAnalytics}
@@ -188,6 +171,27 @@ const EkistiaIndex = React.memo(() => {
         showCollectPanel={showCollectPanel}
         onAIResultsGenerated={setAiResults}
       />
+
+      {/* Floating SAFDZ Layer Toggle */}
+      <div className="fixed top-[120px] left-4 z-[400] bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-3">
+        <label className="flex items-center gap-3 cursor-pointer group">
+          <input
+            type="checkbox"
+            checked={showSafdzLayer}
+            onChange={(e) => setShowSafdzLayer(e.target.checked)}
+            className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500 focus:ring-2"
+          />
+          <div className="flex items-center gap-2">
+            <span className="text-green-600">🌱</span>
+            <span className="text-sm font-medium text-foreground group-hover:text-green-600 transition-colors">
+              SAFDZ Zones
+            </span>
+          </div>
+        </label>
+        <div className="text-xs text-muted-foreground mt-2 max-w-[200px]">
+          Strategic Agriculture & Fisheries Development Zones
+        </div>
+      </div>
 
       {/* Map Analytics Dashboard */}
       {showMapAnalytics && (

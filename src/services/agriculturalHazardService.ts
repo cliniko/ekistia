@@ -78,7 +78,7 @@ const hazardDataCache = new Map<string, any>();
 /**
  * Load hazard GeoJSON data
  */
-export async function loadHazardData(hazardType: keyof typeof HAZARD_DATA_URLS): Promise<any> {
+export async function loadHazardData(hazardType: keyof typeof HAZARD_DATA_URLS | 'safdz'): Promise<any> {
   const cacheKey = hazardType;
 
   // Return cached data if available
@@ -86,7 +86,12 @@ export async function loadHazardData(hazardType: keyof typeof HAZARD_DATA_URLS):
     return hazardDataCache.get(cacheKey);
   }
 
-  const url = HAZARD_DATA_URLS[hazardType];
+  let url: string;
+  if (hazardType === 'safdz') {
+    url = '/iligan_safdz.geojson';
+  } else {
+    url = HAZARD_DATA_URLS[hazardType];
+  }
 
   try {
     const response = await fetch(url);
@@ -107,90 +112,76 @@ export async function loadHazardData(hazardType: keyof typeof HAZARD_DATA_URLS):
 }
 
 /**
- * Initialize hazard layer configurations
+ * Initialize hazard layer configurations (metadata only, no data loading)
+ * Data will be loaded on-demand when layers are first enabled
  */
 export async function initializeHazardLayers(): Promise<HazardLayerConfig[]> {
   const layers: HazardLayerConfig[] = [];
 
-  try {
-    // Load flood data
-    const floodData = await loadHazardData('flood');
-    const floodCounts = countByProperty(floodData, 'FloodSusc');
-    layers.push({
-      id: 'flood',
-      name: 'Flood Hazard Zones',
-      icon: '🌊',
-      enabled: false,
-      opacity: 0.5,
-      color: '#2563eb', // Blue for water-related hazard
-      featureCount: floodData.features.length,
-      categories: [
-        { id: 'VHF', name: 'Very High Flood', color: HAZARD_COLORS.flood.VHF, count: floodCounts['VHF'] || 0, enabled: true },
-        { id: 'HF', name: 'High Flood', color: HAZARD_COLORS.flood.HF, count: floodCounts['HF'] || 0, enabled: true },
-        { id: 'MF', name: 'Medium Flood', color: HAZARD_COLORS.flood.MF, count: floodCounts['MF'] || 0, enabled: true },
-        { id: 'LF', name: 'Low Flood', color: HAZARD_COLORS.flood.LF, count: floodCounts['LF'] || 0, enabled: true }
-      ]
-    });
+  // Return layer metadata without loading actual GeoJSON data
+  // This makes initial load much faster
+  layers.push({
+    id: 'flood',
+    name: 'Flood Hazard Zones',
+    icon: '🌊',
+    enabled: false,
+    opacity: 0.5,
+    color: '#2563eb',
+    featureCount: 0, // Will be set when data loads
+    categories: [
+      { id: 'VHF', name: 'Very High Flood', color: HAZARD_COLORS.flood.VHF, count: 0, enabled: true },
+      { id: 'HF', name: 'High Flood', color: HAZARD_COLORS.flood.HF, count: 0, enabled: true },
+      { id: 'MF', name: 'Medium Flood', color: HAZARD_COLORS.flood.MF, count: 0, enabled: true },
+      { id: 'LF', name: 'Low Flood', color: HAZARD_COLORS.flood.LF, count: 0, enabled: true }
+    ]
+  });
 
-    // Load landslide data
-    const landslideData = await loadHazardData('landslide');
-    const landslideCounts = countByProperty(landslideData, 'LndslideSu');
-    layers.push({
-      id: 'landslide',
-      name: 'Landslide Susceptibility',
-      icon: '⛰️',
-      enabled: false,
-      opacity: 0.5,
-      color: '#92400e', // Brown for earth/ground-related hazard
-      featureCount: landslideData.features.length,
-      categories: [
-        { id: 'VHL', name: 'Very High Landslide', color: HAZARD_COLORS.landslide.VHL, count: landslideCounts['VHL'] || 0, enabled: true },
-        { id: 'HL', name: 'High Landslide', color: HAZARD_COLORS.landslide.HL, count: landslideCounts['HL'] || 0, enabled: true },
-        { id: 'ML', name: 'Medium Landslide', color: HAZARD_COLORS.landslide.ML, count: landslideCounts['ML'] || 0, enabled: true },
-        { id: 'LL', name: 'Low Landslide', color: HAZARD_COLORS.landslide.LL, count: landslideCounts['LL'] || 0, enabled: true },
-        { id: 'DF', name: 'Debris Flow', color: HAZARD_COLORS.landslide.DF, count: landslideCounts['DF'] || 0, enabled: true }
-      ]
-    });
+  layers.push({
+    id: 'landslide',
+    name: 'Landslide Susceptibility',
+    icon: '⛰️',
+    enabled: false,
+    opacity: 0.5,
+    color: '#92400e',
+    featureCount: 0,
+    categories: [
+      { id: 'VHL', name: 'Very High Landslide', color: HAZARD_COLORS.landslide.VHL, count: 0, enabled: true },
+      { id: 'HL', name: 'High Landslide', color: HAZARD_COLORS.landslide.HL, count: 0, enabled: true },
+      { id: 'ML', name: 'Medium Landslide', color: HAZARD_COLORS.landslide.ML, count: 0, enabled: true },
+      { id: 'LL', name: 'Low Landslide', color: HAZARD_COLORS.landslide.LL, count: 0, enabled: true },
+      { id: 'DF', name: 'Debris Flow', color: HAZARD_COLORS.landslide.DF, count: 0, enabled: true }
+    ]
+  });
 
-    // Load slope data
-    const slopeData = await loadHazardData('slope');
-    layers.push({
-      id: 'slope',
-      name: 'Slope Analysis',
-      icon: '📐',
-      enabled: false,
-      opacity: 0.5,
-      color: '#f97316',
-      featureCount: slopeData.features.length
-    });
+  layers.push({
+    id: 'slope',
+    name: 'Slope Analysis',
+    icon: '📐',
+    enabled: false,
+    opacity: 0.5,
+    color: '#f97316',
+    featureCount: 0
+  });
 
-    // Load land use data
-    const landuseData = await loadHazardData('landuse');
-    layers.push({
-      id: 'landuse',
-      name: 'Land Use Classification',
-      icon: '🏗️',
-      enabled: false,
-      opacity: 0.5,
-      color: '#84cc16',
-      featureCount: landuseData.features.length
-    });
+  layers.push({
+    id: 'landuse',
+    name: 'Land Use Classification',
+    icon: '🏗️',
+    enabled: false,
+    opacity: 0.5,
+    color: '#84cc16',
+    featureCount: 0
+  });
 
-    // Load ancestral domain data
-    const ancestralData = await loadHazardData('ancestral');
-    layers.push({
-      id: 'ancestral',
-      name: 'Ancestral Domain',
-      icon: '🏞️',
-      enabled: false,
-      opacity: 0.6,
-      color: '#8b5cf6',
-      featureCount: ancestralData.features.length
-    });
-
-  } catch (error) {
-    console.error('Error initializing hazard layers:', error);
-  }
+  layers.push({
+    id: 'ancestral',
+    name: 'Ancestral Domain',
+    icon: '🏞️',
+    enabled: false,
+    opacity: 0.6,
+    color: '#8b5cf6',
+    featureCount: 0
+  });
 
   return layers;
 }
@@ -362,6 +353,38 @@ export function getLanduseLayerStyle(opacity: number) {
 export function getAncestralLayerStyle(opacity: number) {
   return {
     'fill-color': HAZARD_COLORS.ancestral,
+    'fill-opacity': opacity,
+    'fill-antialias': false // Disable antialiasing for sharper pixel edges
+  };
+}
+
+/**
+ * Get Mapbox style for SAFDZ layer (Pixelated Grid Style)
+ */
+export function getSafdzLayerStyle(opacity: number) {
+  return {
+    'fill-color': [
+      'case',
+      ['==', ['get', 'SAFDZ'], '1'], '#7CFC00',       // Strategic CCP Sub-development Zone - Lawn Green (bright)
+      ['==', ['get', 'SAFDZ'], '2'], '#8B4789',       // Strategic Livestock Sub-development Zone - Purple (rich)
+      ['==', ['get', 'SAFDZ'], '3'], '#87CEEB',       // Strategic Fishery Sub-development Zone - Sky Blue
+      ['==', ['get', 'SAFDZ'], '4'], '#9ACD32',       // Strategic Integrated Crop/Livestock - Yellow Green
+      ['==', ['get', 'SAFDZ'], '5'], '#48D1CC',       // Strategic Integrated Crop/Fishery - Medium Turquoise
+      ['==', ['get', 'SAFDZ'], '6'], '#20B2AA',       // Strategic Integrated Crop/Livestock/Fishery - Light Sea Green
+      ['==', ['get', 'SAFDZ'], '7'], '#4169E1',       // Strategic Integrated Fishery and Livestock - Royal Blue
+      ['==', ['get', 'SAFDZ'], '8'], '#DA70D6',       // NIPAS - Orchid (pink/violet)
+      ['==', ['get', 'SAFDZ'], '9'], '#FF8C00',       // Rangelands/PAAD - Dark Orange (vibrant)
+      ['==', ['get', 'SAFDZ'], '10'], '#228B22',      // Sub-watershed/Forestry Zone - Forest Green
+      ['==', ['get', 'SAFDZ'], 'BU'], '#A9A9A9',      // Built-Up Areas - Dark Gray
+      ['==', ['get', 'SAFDZ'], 'WB'], '#1E90FF',      // Water Bodies - Dodger Blue
+      // Handle mixed classifications (e.g., "9 / BU") - use primary code
+      ['in', '1', ['get', 'SAFDZ']], '#7CFC00',
+      ['in', '2', ['get', 'SAFDZ']], '#8B4789',
+      ['in', '3', ['get', 'SAFDZ']], '#87CEEB',
+      ['in', '8', ['get', 'SAFDZ']], '#DA70D6',
+      ['in', '9', ['get', 'SAFDZ']], '#FF8C00',
+      '#DCDCDC'                                        // Default - Others - Gainsboro
+    ],
     'fill-opacity': opacity,
     'fill-antialias': false // Disable antialiasing for sharper pixel edges
   };

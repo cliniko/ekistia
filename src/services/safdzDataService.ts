@@ -1,8 +1,7 @@
 /**
- * SAFDZ Data Service - Pre-loads and caches SAFDZ GeoJSON data
- * This service starts loading data immediately when imported, ensuring
- * it's available when components mount.
- * 
+ * SAFDZ Data Service - Loads SAFDZ GeoJSON data on demand
+ * This service loads data only when requested, similar to hazard layers.
+ *
  * Debug mode: Set VITE_DEBUG_LOADING=true to see detailed logs
  */
 
@@ -24,11 +23,27 @@ function initializeSafdzData() {
     
     const startTime = DEBUG ? performance.now() : 0;
 
-    safdzDataPromise = fetch('/iligan_safdz.geojson')
+    // Add cache-busting parameter to prevent browser caching issues
+    const cacheBust = `?t=${Date.now()}`;
+    safdzDataPromise = fetch(`/iligan_safdz.geojson${cacheBust}`, {
+      headers: {
+        'Accept': 'application/json',
+        'Accept-Encoding': 'gzip, deflate'
+      },
+      // Ensure fresh request
+      cache: 'no-cache'
+    })
       .then(response => {
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
         }
+
+        // Check content type to ensure we're getting JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error(`Expected JSON response but got: ${contentType}`);
+        }
+
         return response.json();
       })
       .then(data => {
@@ -99,5 +114,4 @@ export function isSafdzDataLoading(): boolean {
   return isLoading;
 }
 
-// Start pre-loading immediately when this module is imported
-initializeSafdzData();
+// Note: SAFDZ data loading is now controlled by toggle - no longer pre-loaded automatically
