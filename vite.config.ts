@@ -4,22 +4,32 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 import fs from "fs";
 
-// Plugin to serve .gz files when .geojson is requested (for local dev)
+// Plugin to serve pre-compressed .geojson files with proper headers (for local dev)
 const geojsonRewritePlugin = () => ({
   name: 'geojson-rewrite',
   configureServer(server: any) {
     server.middlewares.use((req: any, res: any, next: any) => {
-      if (req.url?.endsWith('.geojson')) {
-        const gzPath = req.url + '.gz';
-        const publicGzPath = path.join(process.cwd(), 'public', gzPath);
+      // Check if this is a request for a large geojson file
+      const largeGeojsonFiles = [
+        '/iligan_flood_hazard.geojson',
+        '/iligan_landslide_hazard.geojson',
+        '/iligan_safdz.geojson',
+        '/iligan_slope.geojson',
+        '/iligan_landuse.geojson',
+        '/iligan_ancestral_domain.geojson'
+      ];
 
-        if (fs.existsSync(publicGzPath)) {
-          // Serve the .gz file with proper headers
+      if (largeGeojsonFiles.includes(req.url)) {
+        const filePath = path.join(process.cwd(), 'public', req.url);
+
+        if (fs.existsSync(filePath)) {
+          // These files are pre-compressed (gzipped but with .geojson extension)
+          // Serve them with Content-Encoding: gzip header
           res.setHeader('Content-Type', 'application/geo+json');
           res.setHeader('Content-Encoding', 'gzip');
           res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
 
-          const readStream = fs.createReadStream(publicGzPath);
+          const readStream = fs.createReadStream(filePath);
           readStream.pipe(res);
           return;
         }
