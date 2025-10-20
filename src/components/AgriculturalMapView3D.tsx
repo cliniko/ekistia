@@ -314,59 +314,35 @@ export const AgriculturalMapView3D = React.memo(({
       : { level: 'not-suitable', area: 0 };
   }, []);
 
-  // Load SAFDZ GeoJSON data from parent or cache
+  // SAFDZ data is now loaded on-demand via the separate useEffect when toggle is enabled
+  // This useEffect just handles initial state
   useEffect(() => {
-    // Parent component now loads data first, so externalSafdzData should be available
-    if (externalSafdzData) {
-      setSafdzData(externalSafdzData);
+    // Don't show loading/error states if toggle is disabled
+    if (!externalShowSafdzLayer) {
       setSafdzLoading(false);
-      safdzDataCache = externalSafdzData; // Update cache with external data
+      setSafdzError(null);
       return;
     }
 
-    // Fallback: If data is already cached, use it
+    // If external data provided, use it
+    if (externalSafdzData) {
+      setSafdzData(externalSafdzData);
+      setSafdzLoading(false);
+      safdzDataCache = externalSafdzData;
+      return;
+    }
+
+    // If data is cached, use it
     if (safdzDataCache) {
       setSafdzData(safdzDataCache);
       setSafdzLoading(false);
       return;
     }
 
-    // Emergency fallback: Load independently if parent failed
-    setSafdzLoading(true);
+    // Data will be loaded by the on-demand useEffect below
+    setSafdzLoading(false);
     setSafdzError(null);
-
-    fetch('/iligan_safdz.geojson', {
-      headers: {
-        'Accept-Encoding': 'gzip, deflate'
-      }
-    })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then(data => {
-        if (!data || !data.features || !Array.isArray(data.features)) {
-          throw new Error('Invalid SAFDZ data format');
-        }
-
-        console.log('✅ SAFDZ data loaded:', {
-          features: data.features.length,
-          sampleSAFDZ: data.features.slice(0, 3).map((f: any) => f.properties.SAFDZ)
-        });
-
-        // Cache the data
-        safdzDataCache = data;
-        setSafdzData(data);
-        setSafdzLoading(false);
-      })
-      .catch(error => {
-        console.error('❌ Failed to load SAFDZ data:', error);
-        setSafdzError(error.message || 'Failed to load SAFDZ data');
-        setSafdzLoading(false);
-      });
-  }, [externalSafdzData]);
+  }, [externalSafdzData, externalShowSafdzLayer]);
 
   // Initialize hazard layers (metadata only, no data loading)
   useEffect(() => {
@@ -1844,8 +1820,8 @@ export const AgriculturalMapView3D = React.memo(({
           </div>
           
           
-          {/* Zone Counter */}
-          {(safdzLoading || safdzError || safdzData) && (
+          {/* Zone Counter - only show when SAFDZ toggle is enabled */}
+          {externalShowSafdzLayer && (safdzLoading || safdzError || safdzData) && (
             <div className="px-3 py-2 bg-gray-800/70 rounded-md shadow-sm border border-gray-600/50 text-white text-sm font-normal text-center">
               <div className="text-xs text-gray-300 mb-0.5">
                 {safdzLoading ? 'Loading Zones...' : safdzError ? 'Error' : 'Total Zones'}
