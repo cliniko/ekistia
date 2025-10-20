@@ -13,12 +13,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Precision level (3 decimal places = ~111m accuracy for SAFDZ, 4 for others)
-# Tolerance for geometry simplification (smaller = more aggressive simplification)
-SAFDZ_PRECISION=3
-SAFDZ_TOLERANCE=0.0001
-OTHER_PRECISION=4
-OTHER_TOLERANCE=0.00001
+# Precision level (4 decimal places = ~11m accuracy)
+PRECISION=4
 
 # Change to project root
 cd "$(dirname "$0")/.."
@@ -56,17 +52,10 @@ for FILE in "${FILES[@]}"; do
     cp "$FILE" "$BACKUP"
   fi
   
-  # Optimize with different parameters for SAFDZ vs others
+  # Optimize
   OUTPUT="${FILE%.geojson}_optimized.geojson"
   echo "⚙️  Optimizing: $FILE"
-
-  if [[ "$FILE" == "public/iligan_safdz.geojson" ]]; then
-    # SAFDZ: More aggressive optimization (lower precision, higher tolerance)
-    node scripts/optimize_geojson.js "$FILE" "$OUTPUT" "$SAFDZ_PRECISION" "$SAFDZ_TOLERANCE"
-  else
-    # Other files: Conservative optimization
-    node scripts/optimize_geojson.js "$FILE" "$OUTPUT" "$OTHER_PRECISION" "$OTHER_TOLERANCE"
-  fi
+  node scripts/optimize_geojson.js "$FILE" "$OUTPUT" "$PRECISION"
   
   # Replace original with optimized
   mv "$OUTPUT" "$FILE"

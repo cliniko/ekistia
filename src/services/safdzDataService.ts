@@ -23,12 +23,15 @@ function initializeSafdzData() {
     
     const startTime = DEBUG ? performance.now() : 0;
 
-    safdzDataPromise = fetch('/iligan_safdz.geojson', {
+    // Add cache-busting parameter to prevent browser caching issues
+    const cacheBust = `?t=${Date.now()}`;
+    safdzDataPromise = fetch(`/iligan_safdz.geojson${cacheBust}`, {
       headers: {
         'Accept': 'application/json',
         'Accept-Encoding': 'gzip, deflate'
-      }
-      // Let browser cache handle this (Vercel serves with proper cache headers)
+      },
+      // Ensure fresh request
+      cache: 'no-cache'
     })
       .then(response => {
         if (!response.ok) {

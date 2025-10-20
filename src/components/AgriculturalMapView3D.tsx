@@ -59,6 +59,10 @@ interface AgriculturalMapView3DProps {
   onMap3DReady?: (isReady: boolean) => void;
   // SAFDZ layer control (separate from hazard layers)
   showSafdzLayer?: boolean;
+  // Panel states (to adjust legend position)
+  showMapAnalytics?: boolean;
+  showHazardsPanel?: boolean;
+  showCollectPanel?: boolean;
 }
 
 // You'll need to get your Mapbox access token from https://mapbox.com
@@ -86,7 +90,10 @@ export const AgriculturalMapView3D = React.memo(({
   aiResults,
   onMapReady,
   onMap3DReady,
-  showSafdzLayer: externalShowSafdzLayer
+  showSafdzLayer: externalShowSafdzLayer,
+  showMapAnalytics,
+  showHazardsPanel,
+  showCollectPanel
 }: AgriculturalMapView3DProps) => {
   const mapRef = useRef<MapRef>(null);
   const [boundariesLoaded, setBoundariesLoaded] = useState(false);
@@ -424,6 +431,9 @@ export const AgriculturalMapView3D = React.memo(({
     const map = mapRef.current.getMap();
 
     Object.entries(hazardDataLoaded).forEach(([hazardType, data]) => {
+      // Skip SAFDZ data as it's handled separately
+      if (hazardType === 'safdz') return;
+
       const layer = hazardLayers.find(l => l.id === hazardType);
       const sourceId = `${hazardType}-hazard`;
       const fillLayerId = `${hazardType}-fill`;
@@ -658,7 +668,7 @@ export const AgriculturalMapView3D = React.memo(({
   useEffect(() => {
     const map = mapRef.current?.getMap();
     // Don't wait for boundaries - SAFDZ can load independently
-    if (!map || !safdzData || safdzLoading || safdzError) return;
+    if (!map || !safdzData || safdzLoading || safdzError || !externalShowSafdzLayer) return;
     
     console.log('🎯 SAFDZ useEffect triggered - attempting to add layers');
 
@@ -1008,8 +1018,26 @@ export const AgriculturalMapView3D = React.memo(({
         }
       }
     };
-  }, [safdzData, mapStyle]); // Re-add layers when data or map style changes (removed boundariesLoaded dependency)
+  }, [safdzData, mapStyle, externalShowSafdzLayer]); // Re-add layers when data, map style, or toggle state changes
 
+  // Remove SAFDZ layers when toggle is turned off
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || externalShowSafdzLayer) return;
+
+    try {
+      // Remove SAFDZ layers when toggle is off
+      if (map.getLayer('safdz-labels')) map.removeLayer('safdz-labels');
+      if (map.getLayer('safdz-outline')) map.removeLayer('safdz-outline');
+      if (map.getLayer('safdz-fill')) map.removeLayer('safdz-fill');
+      if (map.getLayer('safdz-fill-test')) map.removeLayer('safdz-fill-test');
+      if (map.getSource('safdz-zones')) map.removeSource('safdz-zones');
+
+      console.log('🗑️ SAFDZ layers removed (toggle off)');
+    } catch (error) {
+      console.error('❌ Failed to remove SAFDZ layers:', error);
+    }
+  }, [externalShowSafdzLayer]);
 
   // Handle AI results - highlight matching SAFDZ zones in blue
   useEffect(() => {
@@ -1394,7 +1422,9 @@ export const AgriculturalMapView3D = React.memo(({
 
         {/* Map Legend - Compact by default, expands on hover */}
         <div
-          className="absolute bottom-4 right-4 bg-white/90 rounded-xl shadow-2xl border border-gray-200 transition-all duration-300 ease-in-out cursor-pointer"
+          className={`absolute bottom-4 bg-white/90 rounded-xl shadow-2xl border border-gray-200 transition-all duration-300 ease-in-out cursor-pointer ${
+            showHazardsPanel || showMapAnalytics || showCollectPanel ? 'right-[400px]' : 'right-4'
+          }`}
           onMouseEnter={() => setIsLegendExpanded(true)}
           onMouseLeave={() => setIsLegendExpanded(false)}
         >
@@ -1653,8 +1683,8 @@ export const AgriculturalMapView3D = React.memo(({
                     // Terrain not available for this map style, silently continue
                   }
 
-                  // Re-add SAFDZ layers immediately after style change
-                  if (safdzData) {
+                  // Re-add SAFDZ layers immediately after style change (only if toggle is on)
+                  if (safdzData && externalShowSafdzLayer) {
                     const addSafdzLayersAfterStyleChange = () => {
                         try {
                           // Clean up any existing layers
@@ -1799,12 +1829,6 @@ export const AgriculturalMapView3D = React.memo(({
                           console.error('Error re-adding SAFDZ layers after style change:', error);
                         }
                       };
-
-                    if (map.isStyleLoaded()) {
-                      addSafdzLayersAfterStyleChange();
-                    } else {
-                      map.once('style.load', addSafdzLayersAfterStyleChange);
-                    }
                   }
 
                   setViewState(currentViewState);

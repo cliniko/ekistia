@@ -79,10 +79,6 @@ const EkistiaIndex = React.memo(() => {
     setSelectedBarangay(barangay);
   }, []);
 
-  // Handle map 3D readiness
-  const handleMap3DReady = useCallback((isReady: boolean) => {
-    setIsMap3DReady(isReady);
-  }, []);
 
   // Hazard layer handlers
   const handleHazardLayerToggle = useCallback((layerId: string) => {
@@ -139,6 +135,9 @@ const EkistiaIndex = React.memo(() => {
         aiResults={aiResults}
         onMapReady={setIsMapReady}
         showSafdzLayer={showSafdzLayer}
+        showMapAnalytics={showMapAnalytics}
+        showHazardsPanel={showHazardsPanel}
+        showCollectPanel={showCollectPanel}
       />
 
       {/* Ekistia Header */}
