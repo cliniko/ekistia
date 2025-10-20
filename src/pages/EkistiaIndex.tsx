@@ -6,6 +6,7 @@ import BarangayDetails from '@/components/BarangayDetails';
 import MapAnalyticsDashboard from '@/components/MapAnalyticsDashboard';
 import CollectDataPanel from '@/components/CollectDataPanel';
 import HazardPanel from '@/components/HazardPanel';
+import LoadingScreen from '@/components/LoadingScreen';
 import type { HazardLayerConfig } from '@/components/AgriculturalHazardLayerControl';
 import { barangayData } from '@/data/barangayData';
 import { Barangay, CropType } from '@/types/agricultural';
@@ -49,6 +50,8 @@ const EkistiaIndex = React.memo(() => {
   const [showMapAnalytics, setShowMapAnalytics] = useState(false);
   const [showHazardsPanel, setShowHazardsPanel] = useState(false);
   const [showCollectPanel, setShowCollectPanel] = useState(false);
+  const [aiResults, setAiResults] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Hazard layers state
   const [hazardLayers, setHazardLayers] = useState<HazardLayerConfig[]>([]);
@@ -56,21 +59,34 @@ const EkistiaIndex = React.memo(() => {
 
   // Load SAFDZ data using the pre-loader service
   useEffect(() => {
-    // Check if data is already loaded synchronously
-    if (isSafdzDataLoaded()) {
-      const data = getSafdzDataSync();
-      setSafdzData(data);
-      return;
-    }
+    const loadData = async () => {
+      try {
+        // Check if data is already loaded synchronously
+        if (isSafdzDataLoaded()) {
+          const data = getSafdzDataSync();
+          setSafdzData(data);
 
-    // Otherwise, wait for it to load
-    getSafdzData()
-      .then(data => {
+          // Add minimum loading time for better UX (1.5 seconds)
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          setIsLoading(false);
+          return;
+        }
+
+        // Otherwise, wait for it to load
+        const data = await getSafdzData();
         setSafdzData(data);
-      })
-      .catch(error => {
+
+        // Add minimum loading time for better UX (1.5 seconds)
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        setIsLoading(false);
+      } catch (error) {
         console.error('❌ Failed to load SAFDZ data:', error);
-      });
+        // Still hide loading screen even on error
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
   }, []);
 
   // Memoize summary statistics
@@ -124,11 +140,10 @@ const EkistiaIndex = React.memo(() => {
   }, []);
 
 
-  // No longer blocking render while waiting for SAFDZ data
-  // The map component will handle the loading state gracefully
-
   return (
     <div className="min-h-screen relative">
+      {/* Loading Screen */}
+      <LoadingScreen isLoading={isLoading} />
       {/* Fullscreen Agricultural Map */}
       <AgriculturalMapView3D
         barangays={barangays}
@@ -139,6 +154,7 @@ const EkistiaIndex = React.memo(() => {
         hazardLayers={hazardLayers}
         onHazardLayersChange={setHazardLayers}
         globalHazardOpacity={globalHazardOpacity}
+        aiResults={aiResults}
       />
 
       {/* Ekistia Header */}
@@ -170,6 +186,7 @@ const EkistiaIndex = React.memo(() => {
           setShowHazardsPanel(false);
         }}
         showCollectPanel={showCollectPanel}
+        onAIResultsGenerated={setAiResults}
       />
 
       {/* Map Analytics Dashboard */}
@@ -210,7 +227,51 @@ const EkistiaIndex = React.memo(() => {
           />
         </div>
       )}
-      
+
+      {/* AI Results Panel */}
+      {aiResults && !selectedBarangay && (
+        <div className={`fixed ${isMobile ? 'bottom-16 left-4 right-4 top-auto z-30' : 'bottom-6 left-6 z-30 w-96'} bg-white/95 backdrop-blur-sm rounded-lg shadow-xl border border-gray-200 transition-all duration-300 ease-in-out`}>
+          <div className="p-4">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <h3 className="font-semibold text-gray-900">AI Results</h3>
+              </div>
+              <button
+                onClick={() => setAiResults(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-2 text-sm text-gray-600 mb-3">
+              <div><span className="font-medium text-gray-900">{aiResults.foundAreas}</span> areas found</div>
+              <div className="text-xs text-gray-500">Showing top {aiResults.topLocations.length} matches on map</div>
+            </div>
+
+            <div className="space-y-2">
+              {aiResults.topLocations.map((location: any, index: number) => (
+                <div
+                  key={index}
+                  className="flex items-start gap-3 p-2 bg-gray-50 rounded border border-gray-200 hover:border-gray-300 transition-colors"
+                >
+                  <div className="flex items-center justify-center w-6 h-6 bg-gray-900 text-white rounded-full text-xs font-semibold flex-shrink-0">
+                    {index + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm text-gray-900 truncate">{location.name}</div>
+                    <div className="text-xs text-gray-500">{location.area} • {location.score}% match</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
 
     </div>
   );

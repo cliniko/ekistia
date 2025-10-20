@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { Filter, TrendingUp, ChevronDown, Upload, AlertTriangle } from "lucide-react";
+import { Filter, TrendingUp, ChevronDown, Upload, AlertTriangle, Sparkles } from "lucide-react";
+import { AIQueryModal } from './AIQueryModal';
 import logo from './ekistia_logo.png';
 
 interface EkistiaHeaderProps {
@@ -25,6 +26,8 @@ interface EkistiaHeaderProps {
   // Collect panel props
   onCollectClick?: () => void;
   showCollectPanel?: boolean;
+  // AI results callback
+  onAIResultsGenerated?: (results: any) => void;
 }
 
 export const EkistiaHeader = ({
@@ -38,8 +41,11 @@ export const EkistiaHeader = ({
   showHazardsPanel = false,
   toggleHazardsPanel,
   onCollectClick,
-  showCollectPanel = false
+  showCollectPanel = false,
+  onAIResultsGenerated
 }: EkistiaHeaderProps) => {
+  const [showAIModal, setShowAIModal] = useState(false);
+
   // Calculate header width based on open panels
   const getHeaderStyle = () => {
     if (showMapAnalytics || showCollectPanel || showHazardsPanel) {
@@ -277,6 +283,16 @@ export const EkistiaHeader = ({
             </Button>
           )}
 
+          {/* AI Mode Button */}
+          <Button
+            onClick={() => setShowAIModal(true)}
+            size="sm"
+            className="gap-2 bg-gray-900 hover:bg-gray-800 text-white"
+          >
+            <Sparkles className="w-4 h-4" />
+            AI Mode
+          </Button>
+
         </div>
 
       </div>
@@ -320,9 +336,26 @@ export const EkistiaHeader = ({
               Collect
             </Button>
           )}
+
+          {/* AI Mode Button - Mobile */}
+          <Button
+            onClick={() => setShowAIModal(true)}
+            size="sm"
+            className="gap-1 text-xs whitespace-nowrap bg-gray-900 hover:bg-gray-800 text-white"
+          >
+            <Sparkles className="w-3 h-3" />
+            AI
+          </Button>
         </div>
       </div>
 
+      <AIQueryModal
+        isOpen={showAIModal}
+        onClose={() => setShowAIModal(false)}
+        onResultsGenerated={(results) => {
+          onAIResultsGenerated?.(results);
+        }}
+      />
     </header>
   );
 };

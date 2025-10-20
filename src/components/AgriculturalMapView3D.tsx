@@ -6,10 +6,10 @@ import { Barangay, CropType, SuitabilityLevel } from '@/types/agricultural';
 // Disable Mapbox telemetry globally
 if (typeof window !== 'undefined') {
   // @ts-ignore - Mapbox GL JS global config
-  window.mapboxgl = window.mapboxgl || {};
+  (window as any).mapboxgl = (window as any).mapboxgl || {};
   // @ts-ignore
-  window.mapboxgl.config = {
-    ...window.mapboxgl.config,
+  (window as any).mapboxgl.config = {
+    ...(window as any).mapboxgl.config,
     TELEMETRY: false,
     PERFORMANCE_METRICS: false
   };
@@ -51,6 +51,8 @@ interface AgriculturalMapView3DProps {
   hazardLayers?: HazardLayerConfig[];
   onHazardLayersChange?: (layers: HazardLayerConfig[]) => void;
   globalHazardOpacity?: number;
+  // AI results
+  aiResults?: any;
 }
 
 // You'll need to get your Mapbox access token from https://mapbox.com
@@ -74,7 +76,8 @@ export const AgriculturalMapView3D = React.memo(({
   safdzData: externalSafdzData,
   hazardLayers: externalHazardLayers,
   onHazardLayersChange,
-  globalHazardOpacity: externalGlobalOpacity
+  globalHazardOpacity: externalGlobalOpacity,
+  aiResults
 }: AgriculturalMapView3DProps) => {
   const mapRef = useRef<MapRef>(null);
   const [boundariesLoaded, setBoundariesLoaded] = useState(false);
@@ -249,7 +252,7 @@ export const AgriculturalMapView3D = React.memo(({
     setSafdzLoading(true);
     setSafdzError(null);
 
-    fetch('/safdz_agri_barangays.geojson')
+    fetch('/iligan_safdz.geojson')
       .then(response => {
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -260,6 +263,11 @@ export const AgriculturalMapView3D = React.memo(({
         if (!data || !data.features || !Array.isArray(data.features)) {
           throw new Error('Invalid SAFDZ data format');
         }
+
+        console.log('✅ SAFDZ data loaded:', {
+          features: data.features.length,
+          sampleSAFDZ: data.features.slice(0, 3).map((f: any) => f.properties.SAFDZ)
+        });
 
         // Cache the data
         safdzDataCache = data;
@@ -606,7 +614,7 @@ export const AgriculturalMapView3D = React.memo(({
   // Add SAFDZ layers to map (when data is loaded or map style changes)
   useEffect(() => {
     const map = mapRef.current?.getMap();
-    if (!map || !safdzData || safdzLoading || safdzError) return;
+    if (!map || !safdzData || safdzLoading || safdzError || !boundariesLoaded) return;
 
     const addSafdzLayers = () => {
       // Ensure map is fully loaded before adding layers
@@ -623,13 +631,14 @@ export const AgriculturalMapView3D = React.memo(({
         if (map.getSource('safdz-zones')) map.removeSource('safdz-zones');
 
         // Add GeoJSON source
+        console.log('🗺️ Adding SAFDZ source with', safdzData.features.length, 'features');
         map.addSource('safdz-zones', {
           type: 'geojson',
           data: safdzData
         });
 
         // Add fill layer with hectare-based categorization and filtering
-        // Add at the top of the layer stack to ensure visibility
+        // Add it without specifying beforeId to ensure it renders on top
         map.addLayer({
           id: 'safdz-fill',
           type: 'fill',
@@ -677,16 +686,32 @@ export const AgriculturalMapView3D = React.memo(({
           paint: {
             'fill-color': [
               'case',
-              ['==', ['get', 'LMU_CODE'], '111'], '#22c55e', // Prime Agricultural Land - Green
-              ['==', ['get', 'LMU_CODE'], '112'], '#eab308', // Good Agricultural Land - Yellow
-              ['==', ['get', 'LMU_CODE'], '113'], '#f97316', // Fair Agricultural Land - Orange
-              ['==', ['get', 'LMU_CODE'], '117'], '#ef4444', // Marginal Agricultural Land - Red
-              '#94a3b8'                                       // Default - Gray for unknown
+              ['==', ['get', 'SAFDZ'], '1'], '#7CFC00',       // Strategic CCP Sub-development Zone - Lawn Green (bright)
+              ['==', ['get', 'SAFDZ'], '2'], '#8B4789',       // Strategic Livestock Sub-development Zone - Purple (rich)
+              ['==', ['get', 'SAFDZ'], '3'], '#87CEEB',       // Strategic Fishery Sub-development Zone - Sky Blue
+              ['==', ['get', 'SAFDZ'], '4'], '#9ACD32',       // Strategic Integrated Crop/Livestock - Yellow Green
+              ['==', ['get', 'SAFDZ'], '5'], '#48D1CC',       // Strategic Integrated Crop/Fishery - Medium Turquoise
+              ['==', ['get', 'SAFDZ'], '6'], '#20B2AA',       // Strategic Integrated Crop/Livestock/Fishery - Light Sea Green
+              ['==', ['get', 'SAFDZ'], '7'], '#4169E1',       // Strategic Integrated Fishery and Livestock - Royal Blue
+              ['==', ['get', 'SAFDZ'], '8'], '#DA70D6',       // NIPAS - Orchid (pink/violet)
+              ['==', ['get', 'SAFDZ'], '9'], '#FF8C00',       // Rangelands/PAAD - Dark Orange (vibrant)
+              ['==', ['get', 'SAFDZ'], '10'], '#228B22',      // Sub-watershed/Forestry Zone - Forest Green
+              ['==', ['get', 'SAFDZ'], 'BU'], '#A9A9A9',      // Built-Up Areas - Dark Gray
+              ['==', ['get', 'SAFDZ'], 'WB'], '#1E90FF',      // Water Bodies - Dodger Blue
+              // Handle mixed classifications (e.g., "9 / BU") - use primary code
+              ['in', '1', ['get', 'SAFDZ']], '#7CFC00',
+              ['in', '2', ['get', 'SAFDZ']], '#8B4789',
+              ['in', '3', ['get', 'SAFDZ']], '#87CEEB',
+              ['in', '8', ['get', 'SAFDZ']], '#DA70D6',
+              ['in', '9', ['get', 'SAFDZ']], '#FF8C00',
+              '#DCDCDC'                                        // Default - Others - Gainsboro
             ],
-            'fill-opacity': 0.8, // Increased opacity for visibility testing
-            'fill-antialias': false // Pixelated edges for consistency
+            'fill-opacity': 0.5, // Moderate opacity for balanced visibility
+            'fill-antialias': true // Smooth edges for better visuals
           }
         });
+        
+        console.log('✅ SAFDZ fill layer added to map');
 
         // Add a simple test layer without filters to verify data is rendering
         map.addLayer({
@@ -695,10 +720,10 @@ export const AgriculturalMapView3D = React.memo(({
           source: 'safdz-zones',
           paint: {
             'fill-color': '#ff0000',
-            'fill-opacity': 0.2
+            'fill-opacity': 0.5
           },
           layout: {
-            'visibility': 'none' // Hidden by default, can be toggled for debugging
+            'visibility': 'none' // Hidden - using proper colored layers now
           }
         });
 
@@ -753,22 +778,37 @@ export const AgriculturalMapView3D = React.memo(({
           paint: {
             'line-color': [
               'case',
-              ['==', ['get', 'LMU_CODE'], '111'], '#16a34a', // Prime Agricultural Land - Dark Green
-              ['==', ['get', 'LMU_CODE'], '112'], '#ca8a04', // Good Agricultural Land - Dark Yellow
-              ['==', ['get', 'LMU_CODE'], '113'], '#ea580c', // Fair Agricultural Land - Dark Orange
-              ['==', ['get', 'LMU_CODE'], '117'], '#dc2626', // Marginal Agricultural Land - Dark Red
-              '#64748b'                                       // Default - Dark Gray for unknown
+              ['==', ['get', 'SAFDZ'], '1'], '#228B22',       // Strategic CCP - Forest Green
+              ['==', ['get', 'SAFDZ'], '2'], '#4B0082',       // Strategic Livestock - Indigo
+              ['==', ['get', 'SAFDZ'], '3'], '#4682B4',       // Strategic Fishery - Steel Blue
+              ['==', ['get', 'SAFDZ'], '4'], '#6B8E23',       // Strategic Integrated Crop/Livestock - Olive Drab
+              ['==', ['get', 'SAFDZ'], '5'], '#008B8B',       // Strategic Integrated Crop/Fishery - Dark Cyan
+              ['==', ['get', 'SAFDZ'], '6'], '#2F4F4F',       // Strategic Integrated Crop/Livestock/Fishery - Dark Slate Gray
+              ['==', ['get', 'SAFDZ'], '7'], '#191970',       // Strategic Integrated Fishery and Livestock - Midnight Blue
+              ['==', ['get', 'SAFDZ'], '8'], '#8B008B',       // NIPAS - Dark Magenta
+              ['==', ['get', 'SAFDZ'], '9'], '#D2691E',       // Rangelands/PAAD - Chocolate
+              ['==', ['get', 'SAFDZ'], '10'], '#006400',      // Sub-watershed/Forestry - Dark Green
+              ['==', ['get', 'SAFDZ'], 'BU'], '#2F4F4F',      // Built-Up Areas - Dark Slate Gray
+              ['==', ['get', 'SAFDZ'], 'WB'], '#00008B',      // Water Bodies - Dark Blue
+              // Handle mixed classifications
+              ['in', '1', ['get', 'SAFDZ']], '#228B22',
+              ['in', '2', ['get', 'SAFDZ']], '#4B0082',
+              ['in', '3', ['get', 'SAFDZ']], '#4682B4',
+              ['in', '8', ['get', 'SAFDZ']], '#8B008B',
+              ['in', '9', ['get', 'SAFDZ']], '#D2691E',
+              '#696969'                                        // Default - Dim Gray
             ],
-            'line-width': 2, // Increased width for visibility testing
-            'line-opacity': 1.0 // Full opacity for visibility testing
+            'line-width': 1.5, // Constant line width for visibility
+            'line-opacity': 0.7 // Moderate opacity for clear boundaries
           }
         });
         
+        console.log('✅ SAFDZ outline layer added to map');
+        
         // Mark SAFDZ layers as ready and trigger 3D feature loading after a short delay
         setSafdzLayersReady(true);
-        setTimeout(() => {
-          setLoad3DFeatures(true);
-        }, 100); // Small delay to ensure layers are fully rendered
+        // Load 3D features immediately since terrain and buildings should be visible regardless of SAFDZ
+        setLoad3DFeatures(true);
 
         // Labels layer disabled - not showing barangay names and hectare sizes yet
         // Uncomment when labels are needed
@@ -881,7 +921,7 @@ export const AgriculturalMapView3D = React.memo(({
         }
       }
     };
-  }, [safdzData, mapStyle]); // Re-add layers when data or map style changes
+  }, [safdzData, mapStyle, boundariesLoaded]); // Re-add layers when data, map style, or boundaries change
 
   // Update SAFDZ layer visibility when toggle changes
   useEffect(() => {
@@ -890,7 +930,7 @@ export const AgriculturalMapView3D = React.memo(({
 
     const updateVisibility = () => {
       const visibility = showSafdzLayer ? 'visible' : 'none';
-      
+
       try {
         if (map.getLayer('safdz-fill')) {
           map.setLayoutProperty('safdz-fill', 'visibility', visibility);
@@ -909,7 +949,153 @@ export const AgriculturalMapView3D = React.memo(({
 
     // Update visibility immediately
     updateVisibility();
-  }, [showSafdzLayer, safdzData]);
+  }, [showSafdzLayer, safdzData, safdzLoading, safdzError]);
+
+  // Handle AI results - highlight matching SAFDZ zones in blue
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !safdzData || !aiResults) return;
+
+    try {
+      // Remove existing AI highlight layer
+      if (map.getLayer('ai-highlight-fill')) map.removeLayer('ai-highlight-fill');
+      if (map.getLayer('ai-highlight-outline')) map.removeLayer('ai-highlight-outline');
+      if (map.getSource('ai-highlight')) map.removeSource('ai-highlight');
+
+      // Extract barangay names from AI results
+      const aiBarangayNames = aiResults.topLocations.map((loc: any) =>
+        loc.name.replace(/^Barangay\s+/i, '').toLowerCase().trim()
+      );
+
+      // Filter SAFDZ features that match AI result barangays
+      // Also apply additional filtering based on soil quality if available
+      const matchingFeatures = safdzData.features.filter((feature: any) => {
+        const featureBarangayName = (feature.properties.BRGY || '').toLowerCase().trim();
+        const barangayMatch = aiBarangayNames.some((aiName: string) =>
+          featureBarangayName.includes(aiName) || aiName.includes(featureBarangayName)
+        );
+
+        if (!barangayMatch) return false;
+
+        // Additional filtering based on AI criteria
+        // Look for Prime (111) and Good (112) agricultural land if mentioned in criteria
+        const lmuCode = feature.properties.LMU_CODE;
+        const isPrimeOrGood = lmuCode === '111' || lmuCode === '112';
+
+        // For better site selection, prioritize prime/good land if available
+        return isPrimeOrGood || barangayMatch;
+      });
+
+      // Sort by soil quality (prioritize prime land) and take top zones
+      const sortedFeatures = matchingFeatures.sort((a, b) => {
+        const lmuOrder: Record<string, number> = { '111': 1, '112': 2, '113': 3, '117': 4 };
+        const aOrder = lmuOrder[a.properties.LMU_CODE] || 99;
+        const bOrder = lmuOrder[b.properties.LMU_CODE] || 99;
+        return aOrder - bOrder;
+      });
+
+      // Take top zones (limit to prevent overwhelming the map)
+      const topFeatures = sortedFeatures.slice(0, 20);
+
+      if (topFeatures.length > 0) {
+        console.log('🎯 AI highlighting', topFeatures.length, 'zones:',
+          topFeatures.map((f: any) => ({
+            brgy: f.properties.BRGY,
+            lmu: f.properties.LMU_CODE,
+            hectares: f.properties.HECTARES
+          }))
+        );
+
+        // Add source for highlighted zones
+        map.addSource('ai-highlight', {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: topFeatures
+          }
+        });
+
+        // Add bright blue fill layer for highlighting
+        map.addLayer({
+          id: 'ai-highlight-fill',
+          type: 'fill',
+          source: 'ai-highlight',
+          paint: {
+            'fill-color': '#3b82f6', // Bright blue
+            'fill-opacity': 0.5 // Increased opacity for better visibility
+          }
+        });
+
+        // Add prominent blue outline
+        map.addLayer({
+          id: 'ai-highlight-outline',
+          type: 'line',
+          source: 'ai-highlight',
+          paint: {
+            'line-color': '#1e40af', // Dark blue outline
+            'line-width': 4, // Thicker outline for better visibility
+            'line-opacity': 1.0 // Full opacity for clear boundaries
+          }
+        });
+
+        // Calculate the center point from the actual matched zones
+        // Use the centroid of the first feature's geometry
+        const firstFeature = topFeatures[0];
+        let centerLng = 0;
+        let centerLat = 0;
+        let pointCount = 0;
+
+        // Calculate centroid from geometry coordinates
+        if (firstFeature.geometry.type === 'Polygon') {
+          const coords = firstFeature.geometry.coordinates[0];
+          coords.forEach((coord: number[]) => {
+            centerLng += coord[0];
+            centerLat += coord[1];
+            pointCount++;
+          });
+        } else if (firstFeature.geometry.type === 'MultiPolygon') {
+          firstFeature.geometry.coordinates.forEach((polygon: number[][][]) => {
+            polygon[0].forEach((coord: number[]) => {
+              centerLng += coord[0];
+              centerLat += coord[1];
+              pointCount++;
+            });
+          });
+        }
+
+        if (pointCount > 0) {
+          centerLng /= pointCount;
+          centerLat /= pointCount;
+
+          console.log('🗺️ Flying to calculated center:', { lng: centerLng, lat: centerLat });
+
+          // Fly to the calculated center of the highlighted zones
+          map.flyTo({
+            center: [centerLng, centerLat],
+            zoom: 15, // Zoom in closer to see the highlighted zones
+            pitch: 45, // Maintain 3D view
+            duration: 2000
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error highlighting AI results:', error);
+    }
+
+    // Cleanup when AI results change or are cleared
+    return () => {
+      const map = mapRef.current?.getMap();
+      if (map && map.getStyle()) {
+        try {
+          if (map.getLayer('ai-highlight-fill')) map.removeLayer('ai-highlight-fill');
+          if (map.getLayer('ai-highlight-outline')) map.removeLayer('ai-highlight-outline');
+          if (map.getSource('ai-highlight')) map.removeSource('ai-highlight');
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+      }
+    };
+  }, [aiResults, safdzData]);
 
   // Add 3D terrain when map loads (deferred for better initial performance)
   const handleMapLoad = useCallback(() => {
@@ -934,10 +1120,19 @@ export const AgriculturalMapView3D = React.memo(({
     map.on('style.load', hideLabels);
   }, []);
 
+  // Add 3D features immediately when map is ready
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !map.isStyleLoaded()) return;
+
+    // Load 3D features immediately for better initial experience
+    setLoad3DFeatures(true);
+  }, []); // Run once on mount
+
   // Add 3D features after SAFDZ layers are rendered (deferred loading)
   useEffect(() => {
     if (!load3DFeatures) return;
-    
+
     const map = mapRef.current?.getMap();
     if (!map || !map.isStyleLoaded()) return;
 
@@ -952,20 +1147,20 @@ export const AgriculturalMapView3D = React.memo(({
         });
       }
 
-      // Set the terrain with reduced exaggeration for better performance
+      // Set the terrain with proper exaggeration for visibility
       map.setTerrain({
         source: 'mapbox-dem',
         exaggeration: [
           'interpolate',
           ['linear'],
           ['zoom'],
-          10, 1.5,  // Reduced from 2.5
-          14, 1.2,  // Reduced from 1.8
-          18, 0.8   // Reduced from 1.2
+          10, 2.0,  // Increased for better mountain visibility
+          14, 1.8,  // Increased from 1.2
+          18, 1.2   // Increased from 0.8
         ]
       });
 
-      // Add 3D buildings layer with reduced complexity for better performance
+      // Add 3D buildings layer with better visibility settings
       if (!map.getLayer('3d-buildings')) {
         map.addLayer({
           id: '3d-buildings',
@@ -973,44 +1168,52 @@ export const AgriculturalMapView3D = React.memo(({
           'source-layer': 'building',
           filter: ['==', 'extrude', 'true'],
           type: 'fill-extrusion',
-          minzoom: 15, // Increased from 14 - buildings only at closer zoom
+          minzoom: 13, // Reduced from 15 - buildings visible at reasonable zoom
           paint: {
-            // Simplified color for better performance
-            'fill-extrusion-color': '#c0c0c0',
-            // Reduced height exaggeration
+            // More realistic building color
+            'fill-extrusion-color': [
+              'interpolate',
+              ['linear'],
+              ['get', 'height'],
+              0, '#e0e0e0',     // Light gray for low buildings
+              50, '#c0c0c0',    // Medium gray
+              100, '#a0a0a0',   // Darker gray for tall buildings
+              200, '#808080'    // Dark gray for very tall buildings
+            ],
+            // Better height scaling for visibility
             'fill-extrusion-height': [
               'interpolate',
               ['linear'],
               ['zoom'],
-              15, 0,
-              15.5, ['*', ['get', 'height'], 0.3], // Reduced from 0.5
-              16, ['*', ['get', 'height'], 0.6]  // Reduced from 1.0
+              13, 0,
+              13.5, ['*', ['get', 'height'], 0.5], // Increased from 0.3
+              16, ['*', ['get', 'height'], 1.0]     // Increased from 0.6
             ],
             'fill-extrusion-base': ['get', 'min_height'],
-            // Reduced opacity for better performance
-            'fill-extrusion-opacity': 0.6, // Reduced from 0.85
-            // Disabled vertical gradient for performance
-            'fill-extrusion-vertical-gradient': false
+            // Increased opacity for better visibility
+            'fill-extrusion-opacity': 0.8, // Increased from 0.6
+            // Enable vertical gradient for more realistic look
+            'fill-extrusion-vertical-gradient': true
           }
         });
       }
 
-      // Simplified fog for better performance
+      // Enhanced fog for better atmosphere
       map.setFog({
-        color: 'rgb(220, 230, 250)', // Simplified color
-        'high-color': 'rgb(150, 180, 220)', // Simplified high color
-        'horizon-blend': 0.1, // Increased for simpler blending
-        'space-color': 'rgb(50, 60, 80)', // Simplified space color
-        'star-intensity': 0.0, // Disabled stars for performance
-        range: [3, 8] // Reduced range for simpler calculation
+        color: 'rgb(240, 248, 255)', // Light blue sky color
+        'high-color': 'rgb(180, 200, 230)', // Medium blue for horizon
+        'horizon-blend': 0.2, // Better blending
+        'space-color': 'rgb(70, 80, 100)', // Darker space color
+        'star-intensity': 0.0, // Keep stars disabled
+        range: [2, 12] // Extended range for better effect
       });
 
-      // Simplified lighting for better performance
+      // Enhanced lighting for better building definition
       map.setLight({
         anchor: 'viewport',
         color: 'white',
-        intensity: 0.3, // Reduced intensity for better performance
-        position: [1, 90, 30] // Simplified position
+        intensity: 0.5, // Increased from 0.3 for better visibility
+        position: [1, 90, 45] // Better angle for shadows
       });
     } catch (error) {
       console.error('❌ Failed to add 3D features:', error);
@@ -1087,13 +1290,12 @@ export const AgriculturalMapView3D = React.memo(({
           onLoad={handleMapLoad}
           mapStyle={mapStyle}
           mapboxAccessToken={MAPBOX_TOKEN}
-          terrain={{ source: 'mapbox-dem', exaggeration: 2.0 }}
           style={{ width: '100%', height: '100%' }}
           attributionControl={false}
           transformRequest={(url) => {
             // Block Mapbox telemetry/analytics requests
             if (url.includes('events.mapbox.com')) {
-              return { cancel: true };
+              return { cancel: true, url };
             }
             return { url };
           }}
@@ -1124,13 +1326,17 @@ export const AgriculturalMapView3D = React.memo(({
           {!isLegendExpanded ? (
             /* Compact View - Just color dots */
             <div className="p-3 flex items-center gap-2 flex-wrap max-w-[200px]">
-              {/* SAFDZ Land Quality Colors */}
+              {/* SAFDZ Classification Colors */}
               {showSafdzLayer && (
                 <>
-                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#22c55e' }} title="Prime Agricultural (111)"></div>
-                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#eab308' }} title="Good Agricultural (112)"></div>
-                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#f97316' }} title="Fair Agricultural (113)"></div>
-                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#ef4444' }} title="Marginal Agricultural (117)"></div>
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#7CFC00' }} title="Strategic CCP Zone"></div>
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#8B4789' }} title="Strategic Livestock Zone"></div>
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#87CEEB' }} title="Strategic Fishery Zone"></div>
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#DA70D6' }} title="NIPAS"></div>
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#FF8C00' }} title="Rangelands/PAAD"></div>
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#228B22' }} title="Sub-watershed/Forestry"></div>
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#A9A9A9' }} title="Built-Up Areas"></div>
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: '#1E90FF' }} title="Water Bodies"></div>
                 </>
               )}
 
@@ -1299,45 +1505,49 @@ export const AgriculturalMapView3D = React.memo(({
                   
                   {showSafdzLayer && (
                     <div className="space-y-3">
-                      {/* LMU Land Quality Classifications (PRIMARY - used for colors) */}
+                      {/* SAFDZ Classifications */}
                       <div className="space-y-1">
-                        <div className="text-xs font-medium text-green-700 mb-1">Land Quality (LMU) - Zone Colors</div>
-                        <div className="grid grid-cols-1 gap-1">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-4 h-4 rounded" style={{ backgroundColor: '#22c55e' }}></div>
-                            <span className="text-xs text-foreground">Prime Agricultural (111)</span>
+                        <div className="text-xs font-medium text-green-700 mb-1">SAFDZ Classifications</div>
+                        <div className="grid grid-cols-1 gap-1.5 max-h-60 overflow-y-auto pr-1">
+                          <div className="flex items-center space-x-2 group hover:bg-gray-50 px-1 py-0.5 rounded transition-colors">
+                            <div className="w-4 h-4 rounded flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: '#7CFC00' }}></div>
+                            <span className="text-xs text-foreground leading-tight">Strategic CCP Sub-development Zone</span>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-4 h-4 rounded" style={{ backgroundColor: '#eab308' }}></div>
-                            <span className="text-xs text-foreground">Good Agricultural (112)</span>
+                          <div className="flex items-center space-x-2 group hover:bg-gray-50 px-1 py-0.5 rounded transition-colors">
+                            <div className="w-4 h-4 rounded flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: '#8B4789' }}></div>
+                            <span className="text-xs text-foreground leading-tight">Strategic Livestock Sub-development Zone</span>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-4 h-4 rounded" style={{ backgroundColor: '#f97316' }}></div>
-                            <span className="text-xs text-foreground">Fair Agricultural (113)</span>
+                          <div className="flex items-center space-x-2 group hover:bg-gray-50 px-1 py-0.5 rounded transition-colors">
+                            <div className="w-4 h-4 rounded flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: '#87CEEB' }}></div>
+                            <span className="text-xs text-foreground leading-tight">Strategic Fishery Sub-development Zone</span>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-4 h-4 rounded" style={{ backgroundColor: '#ef4444' }}></div>
-                            <span className="text-xs text-foreground">Marginal Agricultural (117)</span>
+                          <div className="flex items-center space-x-2 group hover:bg-gray-50 px-1 py-0.5 rounded transition-colors">
+                            <div className="w-4 h-4 rounded flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: '#DA70D6' }}></div>
+                            <span className="text-xs text-foreground leading-tight">NIPAS (Protected Areas)</span>
+                          </div>
+                          <div className="flex items-center space-x-2 group hover:bg-gray-50 px-1 py-0.5 rounded transition-colors">
+                            <div className="w-4 h-4 rounded flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: '#FF8C00' }}></div>
+                            <span className="text-xs text-foreground leading-tight">Rangelands/PAAD</span>
+                          </div>
+                          <div className="flex items-center space-x-2 group hover:bg-gray-50 px-1 py-0.5 rounded transition-colors">
+                            <div className="w-4 h-4 rounded flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: '#228B22' }}></div>
+                            <span className="text-xs text-foreground leading-tight">Sub-watershed/Forestry Zone</span>
+                          </div>
+                          <div className="flex items-center space-x-2 group hover:bg-gray-50 px-1 py-0.5 rounded transition-colors">
+                            <div className="w-4 h-4 rounded flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: '#A9A9A9' }}></div>
+                            <span className="text-xs text-foreground leading-tight">Built-Up Areas</span>
+                          </div>
+                          <div className="flex items-center space-x-2 group hover:bg-gray-50 px-1 py-0.5 rounded transition-colors">
+                            <div className="w-4 h-4 rounded flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: '#1E90FF' }}></div>
+                            <span className="text-xs text-foreground leading-tight">Water Bodies</span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Zone Size Categories (SECONDARY - for reference) */}
-                      <div className="space-y-1">
-                        <div className="text-xs font-medium text-muted-foreground mb-1">Zone Size Reference</div>
-                        <div className="text-xs text-muted-foreground space-y-0.5">
-                          <div>• Large: &gt;100 ha</div>
-                          <div>• Medium: 50-100 ha</div>
-                          <div>• Small: 20-50 ha</div>
-                          <div>• Micro: &lt;20 ha</div>
-                        </div>
-                      </div>
-
-                      {/* Zone Stats */}
-                      <div className="text-xs text-muted-foreground">
-                        <div className="font-medium mb-1">Strategic Agriculture Zones</div>
-                        <div>Zoning: Strategic Agriculture</div>
-                        <div>Class: Rural</div>
+                      {/* Additional Info */}
+                      <div className="text-xs text-muted-foreground pt-2 border-t border-border">
+                        <div className="font-medium mb-1">Strategic Agriculture & Fisheries Development Zones</div>
+                        <div className="text-xs">Based on DENR/DA-BSWM land classification</div>
                       </div>
                     </div>
                   )}
@@ -1399,8 +1609,18 @@ export const AgriculturalMapView3D = React.memo(({
                         maxzoom: 14
                       });
                     }
-                    // Ensure terrain is enabled for 3D view
-                    map.setTerrain({ source: 'mapbox-dem', exaggeration: 2.0 });
+                    // Ensure terrain is enabled for 3D view with proper exaggeration
+                    map.setTerrain({
+                      source: 'mapbox-dem',
+                      exaggeration: [
+                        'interpolate',
+                        ['linear'],
+                        ['zoom'],
+                        10, 2.0,
+                        14, 1.8,
+                        18, 1.2
+                      ]
+                    });
                   } catch (error) {
                     // Terrain not available for this map style, silently continue
                   }

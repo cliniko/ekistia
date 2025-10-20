@@ -2,28 +2,31 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Sparkles } from 'lucide-react';
 import { currentUser } from '@/data/mockUsers';
 import { AuthModal } from './AuthModal';
+import { AIQueryModal } from './AIQueryModal';
 import logo from './logo.png';
 
-export const Header = ({ 
-  activePanel, 
-  togglePanel 
-}: { 
+export const Header = ({
+  activePanel,
+  togglePanel
+}: {
   activePanel: 'filters' | 'data' | 'documents' | null,
   togglePanel: (panel: 'filters' | 'data' | 'documents') => void
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showAIModal, setShowAIModal] = useState(false);
 
   const handleLogout = () => {
     setIsAuthenticated(false);
@@ -47,25 +50,25 @@ export const Header = ({
           </div>
           
           {/* Embedded tabs */}
-          <div className="hidden md:block">
+          <div className="hidden md:flex items-center gap-2">
             <Tabs value={activePanel || ""} className="w-fit">
               <TabsList>
-                <TabsTrigger 
-                  value="filters" 
+                <TabsTrigger
+                  value="filters"
                   onClick={() => togglePanel('filters')}
                   className={activePanel === 'filters' ? 'bg-pothole-500 text-white' : ''}
                 >
                   Filters
                 </TabsTrigger>
-                <TabsTrigger 
-                  value="data" 
+                <TabsTrigger
+                  value="data"
                   onClick={() => togglePanel('data')}
                   className={activePanel === 'data' ? 'bg-pothole-500 text-white' : ''}
                 >
                   Data Analysis
                 </TabsTrigger>
-                <TabsTrigger 
-                  value="documents" 
+                <TabsTrigger
+                  value="documents"
                   onClick={() => togglePanel('documents')}
                   className={activePanel === 'documents' ? 'bg-pothole-500 text-white' : ''}
                 >
@@ -73,10 +76,27 @@ export const Header = ({
                 </TabsTrigger>
               </TabsList>
             </Tabs>
+
+            {/* AI Mode Button */}
+            <Button
+              onClick={() => setShowAIModal(true)}
+              className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-md"
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              AI Mode
+            </Button>
           </div>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-4">
+          {/* AI Mode Button - Mobile */}
+          <Button
+            onClick={() => setShowAIModal(true)}
+            className="md:hidden bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-md px-3"
+          >
+            <Sparkles className="w-4 h-4" />
+          </Button>
+
           <div className="hidden md:flex items-center">
             <span className="text-sm font-medium text-gray-600">Pothole Data: 1,750</span>
           </div>
@@ -112,13 +132,18 @@ export const Header = ({
         </div>
       </div>
       
-      <AuthModal 
-        isOpen={showAuthModal} 
+      <AuthModal
+        isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         onSuccess={() => {
           setIsAuthenticated(true);
           setShowAuthModal(false);
         }}
+      />
+
+      <AIQueryModal
+        isOpen={showAIModal}
+        onClose={() => setShowAIModal(false)}
       />
     </header>
   );

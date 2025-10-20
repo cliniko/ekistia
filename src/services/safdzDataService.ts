@@ -24,7 +24,7 @@ function initializeSafdzData() {
     
     const startTime = DEBUG ? performance.now() : 0;
 
-    safdzDataPromise = fetch('/safdz_agri_barangays.geojson')
+    safdzDataPromise = fetch('/iligan_safdz.geojson')
       .then(response => {
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
