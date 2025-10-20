@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Slider } from "@/components/ui/slider";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Filter, TrendingUp, ChevronDown, Upload, AlertTriangle, Sparkles } from "lucide-react";
 import { AIQueryModal } from './AIQueryModal';
 import logo from './ekistia_logo.png';
@@ -58,16 +64,16 @@ export const EkistiaHeader = ({
     <header className={getHeaderStyle()}>
       <div className="flex items-center justify-between px-4 py-3">
         {/* Left: Logo and Title */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-2">
             <img
               src={logo}
               alt="Ekistia Logo"
-              className="w-8 h-8 object-contain"
+              className="w-6 h-6 sm:w-8 sm:h-8 object-contain"
             />
             <div>
-              <h1 className="text-lg font-bold text-foreground">Ekistia</h1>
-              <p className="text-xs text-muted-foreground">Agricultural Development Mapping</p>
+              <h1 className="text-base sm:text-lg font-bold text-foreground">Ekistia</h1>
+              <p className="text-xs text-muted-foreground hidden sm:block">Agricultural Development Mapping</p>
             </div>
           </div>
         </div>
@@ -89,159 +95,166 @@ export const EkistiaHeader = ({
               </Button>
 
               {showSafdzFilters && (
-                <div className="absolute top-full mt-8 w-96 bg-white border border-gray-200 rounded-lg shadow-2xl p-4 z-50">
-                  {/* Agricultural Suitability */}
-                  <div className="mb-4">
-                    <div className="text-sm font-medium text-foreground mb-2">Agricultural Suitability:</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { key: '111', label: '111 - Prime' },
-                        { key: '112', label: '112 - Good' },
-                        { key: '113', label: '113 - Fair' },
-                        { key: '117', label: '117 - Marginal' }
-                      ].map(({ key, label }) => (
-                        <label key={key} className="flex items-center gap-2 text-xs">
-                          <input
-                            type="checkbox"
-                            checked={safdzFilters.lmuCategories[key as keyof typeof safdzFilters.lmuCategories]}
-                            onChange={(e) => onSafdzFiltersChange?.({
-                              ...safdzFilters,
-                              lmuCategories: {
-                                ...safdzFilters.lmuCategories,
-                                [key]: e.target.checked
-                              }
-                            })}
-                            className="w-3 h-3"
-                          />
-                          {label}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Size Categories */}
-                  <div className="mb-4">
-                    <div className="text-sm font-medium text-foreground mb-2">Land Area Categories:</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { key: 'large', label: '>100 ha', color: '#dc2626' },
-                        { key: 'medium', label: '50-100 ha', color: '#ea580c' },
-                        { key: 'small', label: '20-50 ha', color: '#ca8a04' },
-                        { key: 'micro', label: '<20 ha', color: '#16a34a' }
-                      ].map(({ key, label, color }) => (
-                        <label key={key} className="flex items-center gap-2 text-xs">
-                          <input
-                            type="checkbox"
-                            checked={safdzFilters.sizeCategories[key as keyof typeof safdzFilters.sizeCategories]}
-                            onChange={(e) => onSafdzFiltersChange?.({
-                              ...safdzFilters,
-                              sizeCategories: {
-                                ...safdzFilters.sizeCategories,
-                                [key]: e.target.checked
-                              }
-                            })}
-                            className="w-3 h-3"
-                          />
-                          <div className="w-2 h-2 rounded" style={{ backgroundColor: color }}></div>
-                          {label}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Hectare Range */}
-                  <div className="mb-4">
-                    <div className="text-sm font-medium text-foreground mb-2">
-                      Hectare Range: {safdzFilters.minHectares} - {safdzFilters.maxHectares} ha
-                    </div>
-                    <div className="space-y-2">
-                      <div>
-                        <label className="text-xs text-muted-foreground">Min: {safdzFilters.minHectares} ha</label>
-                        <input
-                          type="range"
-                          min="0"
-                          max="200"
-                          value={safdzFilters.minHectares}
-                          onChange={(e) => onSafdzFiltersChange?.({
-                            ...safdzFilters,
-                            minHectares: parseInt(e.target.value)
-                          })}
-                          className="w-full"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-muted-foreground">Max: {safdzFilters.maxHectares} ha</label>
-                        <input
-                          type="range"
-                          min="0"
-                          max="500"
-                          value={safdzFilters.maxHectares}
-                          onChange={(e) => onSafdzFiltersChange?.({
-                            ...safdzFilters,
-                            maxHectares: Math.max(parseInt(e.target.value), safdzFilters.minHectares + 1)
-                          })}
-                          className="w-full"
-                        />
+                <Card className="absolute top-full mt-8 w-96 shadow-2xl z-50">
+                  <CardContent className="p-4">
+                    {/* Agricultural Suitability */}
+                    <div className="mb-4">
+                      <Label className="text-sm font-medium mb-2 block">Agricultural Suitability:</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { key: '111', label: '111 - Prime' },
+                          { key: '112', label: '112 - Good' },
+                          { key: '113', label: '113 - Fair' },
+                          { key: '117', label: '117 - Marginal' }
+                        ].map(({ key, label }) => (
+                          <div key={key} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`lmu-${key}`}
+                              checked={safdzFilters.lmuCategories[key as keyof typeof safdzFilters.lmuCategories]}
+                              onCheckedChange={(checked) => onSafdzFiltersChange?.({
+                                ...safdzFilters,
+                                lmuCategories: {
+                                  ...safdzFilters.lmuCategories,
+                                  [key]: checked
+                                }
+                              })}
+                            />
+                            <Label htmlFor={`lmu-${key}`} className="text-xs cursor-pointer">
+                              {label}
+                            </Label>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  </div>
 
-                  {/* Search */}
-                  <div className="mb-4">
-                    <label className="text-sm font-medium text-foreground block mb-2">Search Barangay:</label>
-                    <input
-                      type="text"
-                      value={safdzFilters.searchBarangay}
-                      onChange={(e) => onSafdzFiltersChange?.({
-                        ...safdzFilters,
-                        searchBarangay: e.target.value
+                    {/* Size Categories */}
+                    <div className="mb-4">
+                      <Label className="text-sm font-medium mb-2 block">Land Area Categories:</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { key: 'large', label: '>100 ha', color: '#dc2626' },
+                          { key: 'medium', label: '50-100 ha', color: '#ea580c' },
+                          { key: 'small', label: '20-50 ha', color: '#ca8a04' },
+                          { key: 'micro', label: '<20 ha', color: '#16a34a' }
+                        ].map(({ key, label, color }) => (
+                          <div key={key} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`size-${key}`}
+                              checked={safdzFilters.sizeCategories[key as keyof typeof safdzFilters.sizeCategories]}
+                              onCheckedChange={(checked) => onSafdzFiltersChange?.({
+                                ...safdzFilters,
+                                sizeCategories: {
+                                  ...safdzFilters.sizeCategories,
+                                  [key]: checked
+                                }
+                              })}
+                            />
+                            <div className="w-2 h-2 rounded" style={{ backgroundColor: color }}></div>
+                            <Label htmlFor={`size-${key}`} className="text-xs cursor-pointer">
+                              {label}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Hectare Range */}
+                    <div className="mb-4">
+                      <Label className="text-sm font-medium mb-2 block">
+                        Hectare Range: {safdzFilters.minHectares} - {safdzFilters.maxHectares} ha
+                      </Label>
+                      <div className="space-y-3">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Min: {safdzFilters.minHectares} ha</Label>
+                          <Slider
+                            value={[safdzFilters.minHectares]}
+                            onValueChange={(value) => onSafdzFiltersChange?.({
+                              ...safdzFilters,
+                              minHectares: value[0]
+                            })}
+                            max={200}
+                            min={0}
+                            step={1}
+                            className="mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Max: {safdzFilters.maxHectares} ha</Label>
+                          <Slider
+                            value={[safdzFilters.maxHectares]}
+                            onValueChange={(value) => onSafdzFiltersChange?.({
+                              ...safdzFilters,
+                              maxHectares: Math.max(value[0], safdzFilters.minHectares + 1)
+                            })}
+                            max={500}
+                            min={0}
+                            step={1}
+                            className="mt-1"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Search */}
+                    <div className="mb-4">
+                      <Label htmlFor="search-barangay" className="text-sm font-medium mb-2 block">Search Barangay:</Label>
+                      <Input
+                        id="search-barangay"
+                        type="text"
+                        value={safdzFilters.searchBarangay}
+                        onChange={(e) => onSafdzFiltersChange?.({
+                          ...safdzFilters,
+                          searchBarangay: e.target.value
+                        })}
+                        placeholder="Type barangay name..."
+                        className="text-xs"
+                      />
+                    </div>
+
+                    {/* Statistics */}
+                    {safdzData && safdzData.features && (
+                      <div className="text-xs text-muted-foreground border-t border-border/50 pt-2">
+                        {(() => {
+                          const filteredFeatures = safdzData.features.filter((f: any) => {
+                            const hectares = f.properties.HECTARES || 0;
+                            const lmuCode = f.properties.LMU_CODE || '';
+
+                            const matchesSize =
+                              (hectares >= 100 && safdzFilters.sizeCategories.large) ||
+                              (hectares >= 50 && hectares < 100 && safdzFilters.sizeCategories.medium) ||
+                              (hectares >= 20 && hectares < 50 && safdzFilters.sizeCategories.small) ||
+                              (hectares < 20 && safdzFilters.sizeCategories.micro);
+
+                            const matchesRange = hectares >= safdzFilters.minHectares && hectares <= safdzFilters.maxHectares;
+                            const matchesLmu = safdzFilters.lmuCategories[lmuCode as keyof typeof safdzFilters.lmuCategories];
+                            const matchesSearch = !safdzFilters.searchBarangay ||
+                              f.properties.BRGY.toLowerCase().includes(safdzFilters.searchBarangay.toLowerCase());
+
+                            return matchesSize && matchesRange && matchesLmu && matchesSearch;
+                          });
+                          const totalHectares = filteredFeatures.reduce((sum: number, f: any) => sum + (f.properties.HECTARES || 0), 0);
+                          return `${filteredFeatures.length} zones • ${totalHectares.toFixed(1)} ha total`;
+                        })()}
+                      </div>
+                    )}
+
+                    {/* Clear Filters */}
+                    <Button
+                      onClick={() => onSafdzFiltersChange?.({
+                        sizeCategories: { large: true, medium: true, small: true, micro: true },
+                        minHectares: 0,
+                        maxHectares: 1000,
+                        searchBarangay: '',
+                        lmuCategories: { '111': true, '112': true, '113': true, '117': true }
                       })}
-                      placeholder="Type barangay name..."
-                      className="w-full px-2 py-1 text-xs bg-background border border-border rounded"
-                    />
-                  </div>
-
-                  {/* Statistics */}
-                  {safdzData && safdzData.features && (
-                    <div className="text-xs text-muted-foreground border-t border-border/50 pt-2">
-                      {(() => {
-                        const filteredFeatures = safdzData.features.filter((f: any) => {
-                          const hectares = f.properties.HECTARES || 0;
-                          const lmuCode = f.properties.LMU_CODE || '';
-
-                          const matchesSize =
-                            (hectares >= 100 && safdzFilters.sizeCategories.large) ||
-                            (hectares >= 50 && hectares < 100 && safdzFilters.sizeCategories.medium) ||
-                            (hectares >= 20 && hectares < 50 && safdzFilters.sizeCategories.small) ||
-                            (hectares < 20 && safdzFilters.sizeCategories.micro);
-
-                          const matchesRange = hectares >= safdzFilters.minHectares && hectares <= safdzFilters.maxHectares;
-                          const matchesLmu = safdzFilters.lmuCategories[lmuCode as keyof typeof safdzFilters.lmuCategories];
-                          const matchesSearch = !safdzFilters.searchBarangay ||
-                            f.properties.BRGY.toLowerCase().includes(safdzFilters.searchBarangay.toLowerCase());
-
-                          return matchesSize && matchesRange && matchesLmu && matchesSearch;
-                        });
-                        const totalHectares = filteredFeatures.reduce((sum: number, f: any) => sum + (f.properties.HECTARES || 0), 0);
-                        return `${filteredFeatures.length} zones • ${totalHectares.toFixed(1)} ha total`;
-                      })()}
-                    </div>
-                  )}
-
-                  {/* Clear Filters */}
-                  <button
-                    onClick={() => onSafdzFiltersChange?.({
-                      sizeCategories: { large: true, medium: true, small: true, micro: true },
-                      minHectares: 0,
-                      maxHectares: 1000,
-                      searchBarangay: '',
-                      lmuCategories: { '111': true, '112': true, '113': true, '117': true }
-                    })}
-                    className="w-full mt-3 px-3 py-1 text-xs bg-muted hover:bg-muted/80 rounded transition-colors"
-                  >
-                    Clear Filters
-                  </button>
-                </div>
+                      variant="outline"
+                      size="sm"
+                      className="w-full mt-3"
+                    >
+                      Clear Filters
+                    </Button>
+                  </CardContent>
+                </Card>
               )}
             </div>
           )}

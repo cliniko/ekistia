@@ -1,6 +1,12 @@
 import React from 'react';
 import { Barangay } from '@/types/agricultural';
 import { MapPin, TrendingUp, Layers, Info, X } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface MapAnalyticsDashboardProps {
   barangays: Barangay[];
@@ -13,6 +19,7 @@ export const MapAnalyticsDashboard: React.FC<MapAnalyticsDashboardProps> = ({
   isExpanded: initialExpanded = false,
   onClose
 }) => {
+  const isMobile = useIsMobile();
 
   // Calculate total statistics
   const totalAvailableLand = barangays.reduce((sum, b) => sum + b.availableLand, 0);
@@ -55,25 +62,33 @@ export const MapAnalyticsDashboard: React.FC<MapAnalyticsDashboardProps> = ({
   };
 
   return (
-    <div className="fixed top-0 right-0 z-[500] w-96 h-screen bg-card/95 backdrop-blur-sm border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out">
+    <div className={`fixed z-[500] bg-card/95 backdrop-blur-sm border border-border shadow-xl transform transition-transform duration-300 ease-in-out ${
+      isMobile
+        ? 'top-0 left-0 right-0 bottom-0 w-full h-full'
+        : 'top-0 right-0 w-96 h-screen border-l'
+    }`}>
       {/* Sidebar Content */}
       <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="p-4 border-b flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-primary" />
-              <h3 className="font-semibold">Current Map Analysis</h3>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-primary" />
+                <h3 className="font-semibold">Current Map Analysis</h3>
+              </div>
+              {onClose && (
+                <Button
+                  onClick={onClose}
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  aria-label="Close analytics panel"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
             </div>
-            {onClose && (
-              <button
-                onClick={onClose}
-                className="hover:bg-muted rounded p-1 transition-colors"
-                aria-label="Close analytics panel"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+          </CardHeader>
 
           <div className="overflow-y-auto flex-1">
             {/* Coverage Area */}
@@ -94,55 +109,65 @@ export const MapAnalyticsDashboard: React.FC<MapAnalyticsDashboardProps> = ({
               <div className="text-sm font-medium mb-3">Key Statistics</div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 border border-green-200 dark:border-green-800">
-                  <div className="text-xs text-muted-foreground">Available Land</div>
-                  <div className="text-lg font-bold text-green-700 dark:text-green-400">
-                    {formatNumber(totalAvailableLand)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">hectares</div>
-                </div>
+                <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+                  <CardContent className="p-3">
+                    <div className="text-xs text-muted-foreground">Available Land</div>
+                    <div className="text-lg font-bold text-green-700 dark:text-green-400">
+                      {formatNumber(totalAvailableLand)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">hectares</div>
+                  </CardContent>
+                </Card>
 
-                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
-                  <div className="text-xs text-muted-foreground">Active Demands</div>
-                  <div className="text-lg font-bold text-blue-700 dark:text-blue-400">
-                    {totalActiveDemands}
-                  </div>
-                  <div className="text-xs text-muted-foreground">requests</div>
-                </div>
+                <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                  <CardContent className="p-3">
+                    <div className="text-xs text-muted-foreground">Active Demands</div>
+                    <div className="text-lg font-bold text-blue-700 dark:text-blue-400">
+                      {totalActiveDemands}
+                    </div>
+                    <div className="text-xs text-muted-foreground">requests</div>
+                  </CardContent>
+                </Card>
 
-                <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 border border-purple-200 dark:border-purple-800">
-                  <div className="text-xs text-muted-foreground">Matched Area</div>
-                  <div className="text-lg font-bold text-purple-700 dark:text-purple-400">
-                    {formatNumber(totalMatchedArea)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">hectares</div>
-                </div>
+                <Card className="bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800">
+                  <CardContent className="p-3">
+                    <div className="text-xs text-muted-foreground">Matched Area</div>
+                    <div className="text-lg font-bold text-purple-700 dark:text-purple-400">
+                      {formatNumber(totalMatchedArea)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">hectares</div>
+                  </CardContent>
+                </Card>
 
-                <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3 border border-orange-200 dark:border-orange-800">
-                  <div className="text-xs text-muted-foreground">Priority Zones</div>
-                  <div className="text-lg font-bold text-orange-700 dark:text-orange-400">
-                    {priorityZones}
-                  </div>
-                  <div className="text-xs text-muted-foreground">barangays</div>
-                </div>
+                <Card className="bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800">
+                  <CardContent className="p-3">
+                    <div className="text-xs text-muted-foreground">Priority Zones</div>
+                    <div className="text-lg font-bold text-orange-700 dark:text-orange-400">
+                      {priorityZones}
+                    </div>
+                    <div className="text-xs text-muted-foreground">barangays</div>
+                  </CardContent>
+                </Card>
               </div>
 
-              <div className="bg-muted/50 rounded-lg p-3">
-                <div className="text-xs text-muted-foreground mb-1">Total Agricultural Area</div>
-                <div className="text-2xl font-bold text-foreground">
-                  {formatNumber(totalAgriculturalArea)}
-                  <span className="text-sm font-normal text-muted-foreground ml-1">ha</span>
-                </div>
-                <div className="mt-2 h-2 bg-background rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-green-500"
-                    style={{ width: `${(totalAvailableLand / totalAgriculturalArea) * 100}%` }}
-                  />
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {Math.round((totalAvailableLand / totalAgriculturalArea) * 100)}% available for development
-                </div>
-              </div>
+              <Card className="bg-muted/50">
+                <CardContent className="p-3">
+                  <div className="text-xs text-muted-foreground mb-1">Total Agricultural Area</div>
+                  <div className="text-2xl font-bold text-foreground">
+                    {formatNumber(totalAgriculturalArea)}
+                    <span className="text-sm font-normal text-muted-foreground ml-1">ha</span>
+                  </div>
+                  <div className="mt-2">
+                    <Progress
+                      value={(totalAvailableLand / totalAgriculturalArea) * 100}
+                      className="h-2"
+                    />
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {Math.round((totalAvailableLand / totalAgriculturalArea) * 100)}% available for development
+                  </div>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Crop Suitability Analysis */}
@@ -152,40 +177,44 @@ export const MapAnalyticsDashboard: React.FC<MapAnalyticsDashboardProps> = ({
                 {Object.entries(cropStats)
                   .sort((a, b) => b[1].highlySuitable - a[1].highlySuitable)
                   .map(([crop, stats]) => (
-                    <div key={crop} className="bg-muted/30 rounded-lg p-2.5">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium capitalize">{crop}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {formatNumber(stats.highlySuitable)} ha highly suitable
-                        </span>
-                      </div>
-                      <div className="flex gap-1 h-2 rounded-full overflow-hidden">
-                        <div
-                          className="bg-green-500"
-                          style={{
-                            width: `${(stats.highlySuitable / stats.totalArea) * 100}%`
-                          }}
-                          title="Highly Suitable"
-                        />
-                        <div
-                          className="bg-yellow-500"
-                          style={{
-                            width: `${(stats.moderatelySuitable / stats.totalArea) * 100}%`
-                          }}
-                          title="Moderately Suitable"
-                        />
-                        <div
-                          className="bg-gray-300"
-                          style={{
-                            width: `${((stats.totalArea - stats.highlySuitable - stats.moderatelySuitable) / stats.totalArea) * 100}%`
-                          }}
-                          title="Other"
-                        />
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {stats.count} barangay{stats.count !== 1 ? 's' : ''}
-                      </div>
-                    </div>
+                    <Card key={crop} className="bg-muted/30">
+                      <CardContent className="p-2.5">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-medium capitalize">{crop}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {formatNumber(stats.highlySuitable)} ha highly suitable
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex gap-1 h-2 rounded-full overflow-hidden">
+                            <div
+                              className="bg-green-500"
+                              style={{
+                                width: `${(stats.highlySuitable / stats.totalArea) * 100}%`
+                              }}
+                              title="Highly Suitable"
+                            />
+                            <div
+                              className="bg-yellow-500"
+                              style={{
+                                width: `${(stats.moderatelySuitable / stats.totalArea) * 100}%`
+                              }}
+                              title="Moderately Suitable"
+                            />
+                            <div
+                              className="bg-gray-300"
+                              style={{
+                                width: `${((stats.totalArea - stats.highlySuitable - stats.moderatelySuitable) / stats.totalArea) * 100}%`
+                              }}
+                              title="Other"
+                            />
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {stats.count} barangay{stats.count !== 1 ? 's' : ''}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
                   ))}
               </div>
             </div>
@@ -195,12 +224,9 @@ export const MapAnalyticsDashboard: React.FC<MapAnalyticsDashboardProps> = ({
               <div className="text-sm font-medium mb-2">Visible Areas</div>
               <div className="flex flex-wrap gap-1.5">
                 {visibleBarangays.map((name, idx) => (
-                  <span
-                    key={idx}
-                    className="text-xs px-2 py-1 bg-muted rounded-full border"
-                  >
+                  <Badge key={idx} variant="secondary" className="text-xs">
                     {name}
-                  </span>
+                  </Badge>
                 ))}
               </div>
             </div>
@@ -249,18 +275,18 @@ export const MapAnalyticsDashboard: React.FC<MapAnalyticsDashboardProps> = ({
             </div>
 
             {/* AlphaEarth Info */}
-            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border-t">
-              <div className="flex items-start gap-2">
-                <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5" />
-                <div className="text-xs text-blue-800 dark:text-blue-200">
+            <div className="p-4 border-t">
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription className="text-xs">
                   <div className="font-medium mb-1">Enhanced with AlphaEarth</div>
                   <div>
                     Enable satellite layers (top-right) to view crop-specific suitability analysis
                     using Google Earth Engine's 128-band embeddings for rice, corn, coconut,
                     high-value crops, and vegetables.
                   </div>
-                </div>
-              </div>
+                </AlertDescription>
+              </Alert>
             </div>
           </div>
       </div>

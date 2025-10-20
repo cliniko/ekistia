@@ -2,6 +2,11 @@ import React, { useState } from 'react';
 import { HazardLayer, HazardLayerState } from '@/types';
 import { hazardLayers, HAZARD_COLOR_SCHEMES } from '@/services/hazardDataService';
 import { Layers, ChevronDown, ChevronUp, AlertTriangle, Info } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 interface HazardLayerControlProps {
   hazardLayers: HazardLayer[];
@@ -91,9 +96,10 @@ export const HazardLayerControl: React.FC<HazardLayerControlProps> = ({
     <div className="absolute top-20 right-4 z-[500]">
       {/* Compact Toggle Button */}
       {!isExpanded && (
-        <button
+        <Button
           onClick={() => setIsExpanded(true)}
-          className="bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border px-4 py-2 flex items-center gap-2 hover:bg-card transition-all"
+          variant="secondary"
+          className="bg-card/95 backdrop-blur-sm shadow-lg flex items-center gap-2"
         >
           <AlertTriangle className="w-4 h-4 text-orange-500" />
           <span className="text-sm font-medium">Hazard Layers</span>
@@ -103,7 +109,7 @@ export const HazardLayerControl: React.FC<HazardLayerControlProps> = ({
             </span>
           )}
           <ChevronDown className="w-4 h-4" />
-        </button>
+        </Button>
       )}
 
       {/* Expanded Panel */}

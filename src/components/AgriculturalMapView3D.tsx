@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import Map, { Source, Layer, MapRef } from 'react-map-gl';
 import type { LayerProps, FillLayer } from 'react-map-gl';
 import { Barangay, CropType, SuitabilityLevel } from '@/types/agricultural';
+import { Button } from "@/components/ui/button";
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // Disable Mapbox telemetry globally
 if (typeof window !== 'undefined') {
@@ -98,6 +100,7 @@ export const AgriculturalMapView3D = React.memo(({
   const mapRef = useRef<MapRef>(null);
   const [boundariesLoaded, setBoundariesLoaded] = useState(false);
   const [isLegendExpanded, setIsLegendExpanded] = useState(true);
+  const isMobile = useIsMobile();
   const [safdzData, setSafdzData] = useState<any>(null);
   const [safdzLoading, setSafdzLoading] = useState(true);
   const [safdzError, setSafdzError] = useState<string | null>(null);
@@ -1395,6 +1398,11 @@ export const AgriculturalMapView3D = React.memo(({
           mapboxAccessToken={MAPBOX_TOKEN}
           style={{ width: '100%', height: '100%' }}
           attributionControl={false}
+          interactiveLayerIds={['barangay-fill', 'safdz-fill']}
+          touchZoomRotate={true}
+          doubleClickZoom={true}
+          dragRotate={isMobile ? false : true} // Disable rotation on mobile for better UX
+          pitchWithRotate={isMobile ? false : true}
           transformRequest={(url) => {
             // Block Mapbox telemetry/analytics requests
             if (url.includes('events.mapbox.com')) {
@@ -1422,15 +1430,18 @@ export const AgriculturalMapView3D = React.memo(({
 
         {/* Map Legend - Compact by default, expands on hover */}
         <div
-          className={`absolute bottom-4 bg-white/90 rounded-xl shadow-2xl border border-gray-200 transition-all duration-300 ease-in-out cursor-pointer ${
-            showHazardsPanel || showMapAnalytics || showCollectPanel ? 'right-[400px]' : 'right-4'
+          className={`absolute bg-white/90 rounded-xl shadow-2xl border border-gray-200 transition-all duration-300 ease-in-out ${
+            isMobile
+              ? 'bottom-20 right-4 cursor-pointer max-w-[280px] z-[35]'
+              : `bottom-4 cursor-pointer ${showHazardsPanel || showMapAnalytics || showCollectPanel ? 'right-[400px]' : 'right-4'}`
           }`}
-          onMouseEnter={() => setIsLegendExpanded(true)}
-          onMouseLeave={() => setIsLegendExpanded(false)}
+          onMouseEnter={() => !isMobile && setIsLegendExpanded(true)}
+          onMouseLeave={() => !isMobile && setIsLegendExpanded(false)}
+          onClick={() => isMobile && setIsLegendExpanded(!isLegendExpanded)}
         >
           {!isLegendExpanded ? (
             /* Compact View - Just color dots */
-            <div className="p-3 flex items-center gap-2 flex-wrap max-w-[200px]">
+            <div className={`p-3 flex items-center gap-2 flex-wrap ${isMobile ? 'justify-center' : 'max-w-[200px]'}`}>
 
               {/* Hazard Colors - only show if hazards are enabled */}
               {hazardLayers.find(l => l.id === 'flood' && l.enabled) && (
@@ -1454,7 +1465,7 @@ export const AgriculturalMapView3D = React.memo(({
             </div>
           ) : (
             /* Expanded View - Full details */
-            <div className="p-4">
+            <div className={`${isMobile ? 'p-3 max-h-60 overflow-y-auto' : 'p-4'}`}>
               {/* Hazard Layers Legend */}
               {hazardLayers.some(layer => layer.enabled) && (
                 <div>
@@ -1464,7 +1475,7 @@ export const AgriculturalMapView3D = React.memo(({
                     {hazardLayers.find(l => l.id === 'flood' && l.enabled) && (
                       <div className="space-y-1">
                         <div className="text-xs font-medium text-blue-700">🌊 Flood Risk</div>
-                        <div className="grid grid-cols-2 gap-1">
+                        <div className={`grid gap-1 ${isMobile ? 'grid-cols-1' : 'grid-cols-2'}`}>
                           <div className="flex items-center space-x-1">
                             <div className="w-2 h-2 rounded" style={{ backgroundColor: '#60a5fa' }}></div>
                             <span className="text-xs">Low</span>
@@ -1489,7 +1500,7 @@ export const AgriculturalMapView3D = React.memo(({
                     {hazardLayers.find(l => l.id === 'landslide' && l.enabled) && (
                       <div className="space-y-1">
                         <div className="text-xs font-medium text-orange-700">🏔️ Landslide Risk</div>
-                        <div className="grid grid-cols-2 gap-1">
+                        <div className={`grid gap-1 ${isMobile ? 'grid-cols-1' : 'grid-cols-2'}`}>
                           <div className="flex items-center space-x-1">
                             <div className="w-2 h-2 rounded" style={{ backgroundColor: '#ea580c' }}></div>
                             <span className="text-xs">Low</span>
@@ -1514,7 +1525,7 @@ export const AgriculturalMapView3D = React.memo(({
                     {hazardLayers.find(l => l.id === 'slope' && l.enabled) && (
                       <div className="space-y-1">
                         <div className="text-xs font-medium text-yellow-700">📐 Slope Analysis</div>
-                        <div className="grid grid-cols-2 gap-1">
+                        <div className={`grid gap-1 ${isMobile ? 'grid-cols-1' : 'grid-cols-2'}`}>
                           <div className="flex items-center space-x-1">
                             <div className="w-2 h-2 rounded" style={{ backgroundColor: '#d6d3d1' }}></div>
                             <span className="text-xs">Flat (0-3°)</span>
@@ -1589,7 +1600,7 @@ export const AgriculturalMapView3D = React.memo(({
                   <div className="text-xs font-semibold text-foreground mb-3">🌱 SAFDZ Zones</div>
                   <div className="space-y-1">
                     <div className="text-xs font-medium text-green-700">Strategic Agriculture & Fisheries Development</div>
-                    <div className="grid grid-cols-2 gap-1">
+                    <div className={`grid gap-1 ${isMobile ? 'grid-cols-1' : 'grid-cols-2'}`}>
                       <div className="flex items-center space-x-1">
                         <div className="w-2 h-2 rounded" style={{ backgroundColor: '#7CFC00' }}></div>
                         <span className="text-xs">CCP Zone</span>
@@ -1628,19 +1639,23 @@ export const AgriculturalMapView3D = React.memo(({
         <div className="absolute bottom-4 left-4 flex flex-col gap-2.5 z-[400] min-w-[160px]">
           {/* View Mode Controls */}
           <div className="flex flex-col gap-2">
-            <button
+            <Button
               onClick={() => setViewState(prev => ({ ...prev, pitch: prev.pitch > 0 ? 0 : 45 }))}
-              className="px-3 py-2 bg-white/80 rounded-md shadow-sm border border-gray-300/50 hover:bg-white/90 transition-all duration-200 text-gray-700 font-medium text-sm"
+              variant="outline"
+              size="sm"
+              className="bg-white/90 hover:bg-white border-gray-300"
             >
               {viewState.pitch > 0 ? '2D View' : '3D View'}
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => setViewState(prev => ({ ...prev, bearing: 0, pitch: 45 }))}
-              className="px-3 py-2 bg-white/80 rounded-md shadow-sm border border-gray-300/50 hover:bg-white/90 transition-all duration-200 text-gray-700 font-medium text-sm"
+              variant="outline"
+              size="sm"
+              className="bg-white/90 hover:bg-white border-gray-300"
             >
               Reset View
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => {
                 const map = mapRef.current?.getMap();
                 if (!map) return;
@@ -1837,10 +1852,12 @@ export const AgriculturalMapView3D = React.memo(({
 
                 map.once('style.load', restoreView);
               }}
-              className="px-3 py-2 bg-white/80 rounded-md shadow-sm border border-gray-300/50 hover:bg-white/90 transition-all duration-200 text-gray-700 font-medium text-sm"
+              variant="outline"
+              size="sm"
+              className="bg-white/90 hover:bg-white border-gray-300"
             >
               {mapStyle === 'mapbox://styles/mapbox/satellite-v9' ? 'Streets' : 'Satellite'}
-            </button>
+            </Button>
           </div>
           
           
