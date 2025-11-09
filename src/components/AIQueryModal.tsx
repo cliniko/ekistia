@@ -106,7 +106,7 @@ export const AIQueryModal = ({ isOpen, onClose, onResultsGenerated }: AIQueryMod
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto border-gray-200">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-[600px] max-h-[85vh] overflow-y-auto border-gray-200">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-gray-900">
             <Sparkles className="w-5 h-5 text-gray-700" />

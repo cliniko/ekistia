@@ -40,7 +40,7 @@ def convert_shapefile_to_geojson(shp_path, output_path):
                 print(f"  - {col}")
 
 if __name__ == '__main__':
-    shp_path = 'src/data/safdz and npaaad/ILIGAN SAFDZ/ILIGAN SAFDZ.shp'
+    shp_path = 'src/data/safdz_npaaad_extracted/safdz and npaaad/ILIGAN SAFDZ/ILIGAN SAFDZ.shp'
     output_path = 'public/iligan_safdz.geojson'
     
     convert_shapefile_to_geojson(shp_path, output_path)

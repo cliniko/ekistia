@@ -153,7 +153,7 @@ export const CollectDataPanel = ({ onClose }: CollectDataPanelProps) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
   return (
-    <div className={`fixed z-[500] bg-card/95 backdrop-blur-sm border border-border shadow-xl ${
+    <div className={`fixed z-[500] bg-card/95 backdrop-blur-sm border border-border shadow-xl transition-all duration-300 ${
       isMobile
         ? 'top-0 left-0 right-0 bottom-0 w-full h-full'
         : 'top-0 right-0 w-96 h-screen border-l'
@@ -161,17 +161,17 @@ export const CollectDataPanel = ({ onClose }: CollectDataPanelProps) => {
       {/* Sidebar Content */}
       <div className="flex flex-col h-full">
         {/* Header */}
-        <CardHeader className="pb-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Database className="w-5 h-5 text-blue-500" />
-              <h3 className="font-semibold">Collect Data</h3>
+        <CardHeader className="pb-3 md:pb-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <Database className="w-4 h-4 md:w-5 md:h-5 text-blue-500 flex-shrink-0" />
+              <h3 className="font-semibold text-sm md:text-base truncate">Collect Data</h3>
             </div>
             <Button
               onClick={onClose}
               variant="ghost"
               size="sm"
-              className="h-8 w-8 p-0"
+              className="h-8 w-8 p-0 flex-shrink-0"
             >
               <X className="w-4 h-4" />
             </Button>
@@ -180,7 +180,7 @@ export const CollectDataPanel = ({ onClose }: CollectDataPanelProps) => {
 
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto">
-          <div className="p-4 space-y-4">
+          <div className="p-3 md:p-4 space-y-3 md:space-y-4">
             {/* Compact Upload Section */}
             <div className="text-center space-y-4">
               <div className="flex justify-center">

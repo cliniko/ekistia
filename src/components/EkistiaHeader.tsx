@@ -55,31 +55,32 @@ export const EkistiaHeader = ({
   // Calculate header width based on open panels
   const getHeaderStyle = () => {
     if (showMapAnalytics || showCollectPanel || showHazardsPanel) {
-      return 'fixed top-4 left-4 right-[400px] z-40 rounded-xl bg-white/90 border border-gray-200 shadow-2xl';
+      // On tablets (md), use more conservative spacing; on larger screens (lg+), use full panel width
+      return 'fixed top-4 left-4 right-4 md:right-[420px] lg:right-[420px] z-40 rounded-xl bg-white/90 border border-gray-200 shadow-2xl transition-all duration-300';
     }
-    return 'fixed top-4 left-1/2 transform -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-7xl mx-auto rounded-xl bg-white/90 border border-gray-200 shadow-2xl';
+    return 'fixed top-4 left-1/2 transform -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-7xl mx-auto rounded-xl bg-white/90 border border-gray-200 shadow-2xl transition-all duration-300';
   };
 
   return (
     <header className={getHeaderStyle()}>
-      <div className="flex items-center justify-between px-4 py-3">
+      <div className="flex items-center justify-between px-3 md:px-4 py-2 md:py-3 gap-2">
         {/* Left: Logo and Title */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
             <img
               src={logo}
               alt="Ekistia Logo"
-              className="w-6 h-6 sm:w-8 sm:h-8 object-contain"
+              className="w-6 h-6 sm:w-8 sm:h-8 object-contain flex-shrink-0"
             />
-            <div>
-              <h1 className="text-base sm:text-lg font-bold text-foreground">Ekistia</h1>
-              <p className="text-xs text-muted-foreground hidden sm:block">Agricultural Development Mapping</p>
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-base md:text-lg font-bold text-foreground truncate">Ekistia</h1>
+              <p className={`text-xs text-muted-foreground ${(showMapAnalytics || showCollectPanel || showHazardsPanel) ? 'hidden lg:block' : 'hidden sm:block'}`}>Agricultural Development Mapping</p>
             </div>
           </div>
         </div>
 
-        {/* Center: SAFDZ Filters & Navigation */}
-        <div className="hidden md:flex items-center gap-3">
+        {/* Right: SAFDZ Filters & Navigation */}
+        <div className={`hidden md:flex items-center gap-1 md:gap-2 lg:gap-3 flex-shrink-0 justify-end min-w-0 ${(showMapAnalytics || showCollectPanel || showHazardsPanel) ? 'flex-wrap justify-end' : ''}`}>
           {/* SAFDZ Filter Dropdown - Hide when side panels are open */}
           {safdzFilters && !(showMapAnalytics || showCollectPanel || showHazardsPanel) && (
             <div className="relative">
@@ -87,16 +88,17 @@ export const EkistiaHeader = ({
                 variant="outline"
                 size="sm"
                 onClick={toggleSafdzFilters}
-                className="gap-2 bg-white/10 border-gray-300 hover:bg-gray-50"
+                className="gap-1 md:gap-2 bg-white/10 border-gray-300 hover:bg-gray-50 text-xs md:text-sm flex-shrink-0"
               >
-                <Filter className="w-4 h-4" />
-                Filters
-                <ChevronDown className={`w-3 h-3 transition-transform ${showSafdzFilters ? 'rotate-180' : ''}`} />
+                <Filter className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
+                <span className="hidden md:inline">Filters</span>
+                <span className="md:hidden">Filter</span>
+                <ChevronDown className={`w-3 h-3 transition-transform flex-shrink-0 ${showSafdzFilters ? 'rotate-180' : ''}`} />
               </Button>
 
               {showSafdzFilters && (
-                <Card className="absolute top-full mt-8 w-96 shadow-2xl z-50">
-                  <CardContent className="p-4">
+                <Card className="absolute top-full mt-2 md:mt-8 left-0 md:left-auto right-0 md:right-auto w-[calc(100vw-2rem)] md:w-96 max-w-[calc(100vw-2rem)] md:max-w-none shadow-2xl z-50">
+                  <CardContent className="p-3 md:p-4">
                     {/* Agricultural Suitability */}
                     <div className="mb-4">
                       <Label className="text-sm font-medium mb-2 block">Agricultural Suitability:</Label>
@@ -265,10 +267,11 @@ export const EkistiaHeader = ({
               variant={showMapAnalytics ? 'default' : 'ghost'}
               size="sm"
               onClick={toggleMapAnalytics}
-              className={`gap-2 ${showMapAnalytics ? '' : 'bg-gray-100 border-gray-300 hover:bg-gray-200'}`}
+              className={`gap-1 text-xs md:text-sm flex-shrink-0 ${showMapAnalytics ? '' : 'bg-gray-100 border-gray-300 hover:bg-gray-200'}`}
             >
-              <TrendingUp className="w-4 h-4" />
-              Analytics
+              <TrendingUp className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
+              <span className="hidden xl:inline">Analytics</span>
+              <span className="xl:hidden">Stats</span>
             </Button>
           )}
 
@@ -277,10 +280,11 @@ export const EkistiaHeader = ({
               variant={showHazardsPanel ? 'default' : 'ghost'}
               size="sm"
               onClick={toggleHazardsPanel}
-              className={`gap-2 ${showHazardsPanel ? '' : 'bg-gray-100 border-gray-300 hover:bg-gray-200'}`}
+              className={`gap-1 text-xs md:text-sm flex-shrink-0 ${showHazardsPanel ? '' : 'bg-gray-100 border-gray-300 hover:bg-gray-200'}`}
             >
-              <AlertTriangle className="w-4 h-4" />
-              Hazards
+              <AlertTriangle className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
+              <span className="hidden lg:inline">Hazards</span>
+              <span className="lg:hidden">Haz</span>
             </Button>
           )}
 
@@ -289,10 +293,11 @@ export const EkistiaHeader = ({
               variant="ghost"
               size="sm"
               onClick={onCollectClick}
-              className="gap-2 bg-gray-100 border-gray-300 hover:bg-gray-200"
+              className="gap-1 text-xs md:text-sm bg-gray-100 border-gray-300 hover:bg-gray-200 flex-shrink-0"
             >
-              <Upload className="w-4 h-4" />
-              Collect
+              <Upload className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
+              <span className="hidden lg:inline">Collect</span>
+              <span className="lg:hidden">Col</span>
             </Button>
           )}
 
@@ -300,10 +305,11 @@ export const EkistiaHeader = ({
           <Button
             onClick={() => setShowAIModal(true)}
             size="sm"
-            className="gap-2 bg-gray-900 hover:bg-gray-800 text-white"
+            className="gap-1 text-xs md:text-sm bg-gray-900 hover:bg-gray-800 text-white flex-shrink-0"
           >
-            <Sparkles className="w-4 h-4" />
-            AI Mode
+            <Sparkles className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
+            <span className="hidden xl:inline">AI Mode</span>
+            <span className="xl:hidden">AI</span>
           </Button>
 
         </div>
@@ -311,15 +317,15 @@ export const EkistiaHeader = ({
       </div>
       
       {/* Mobile Navigation */}
-      <div className="md:hidden border-t border-white/20 px-4 py-2">
-        <div className="flex items-center gap-1 overflow-x-auto">
+      <div className="md:hidden border-t border-gray-200 px-4 py-2">
+        <div className="flex items-center gap-1 overflow-x-auto pb-1 -mx-1 px-1">
           {/* Mobile Dashboard Controls */}
           {toggleMapAnalytics && (
             <Button
               variant={showMapAnalytics ? 'default' : 'ghost'}
               size="sm"
               onClick={toggleMapAnalytics}
-              className="gap-1 text-xs whitespace-nowrap"
+              className="gap-1 text-xs whitespace-nowrap flex-shrink-0"
             >
               <TrendingUp className="w-3 h-3" />
               Analytics
@@ -331,7 +337,7 @@ export const EkistiaHeader = ({
               variant={showHazardsPanel ? 'default' : 'ghost'}
               size="sm"
               onClick={toggleHazardsPanel}
-              className="gap-1 text-xs whitespace-nowrap"
+              className="gap-1 text-xs whitespace-nowrap flex-shrink-0"
             >
               <AlertTriangle className="w-3 h-3" />
               Hazards
@@ -343,7 +349,7 @@ export const EkistiaHeader = ({
               variant="ghost"
               size="sm"
               onClick={onCollectClick}
-              className="gap-1 text-xs whitespace-nowrap"
+              className="gap-1 text-xs whitespace-nowrap flex-shrink-0"
             >
               <Upload className="w-3 h-3" />
               Collect
@@ -354,7 +360,7 @@ export const EkistiaHeader = ({
           <Button
             onClick={() => setShowAIModal(true)}
             size="sm"
-            className="gap-1 text-xs whitespace-nowrap bg-gray-900 hover:bg-gray-800 text-white"
+            className="gap-1 text-xs whitespace-nowrap bg-gray-900 hover:bg-gray-800 text-white flex-shrink-0"
           >
             <Sparkles className="w-3 h-3" />
             AI

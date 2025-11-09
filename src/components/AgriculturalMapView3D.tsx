@@ -400,7 +400,7 @@ export const AgriculturalMapView3D = React.memo(({
 
     const loadSafdzData = async () => {
       try {
-        console.log('📥 Loading SAFDZ data on-demand...');
+        console.log('📥 Loading SAFDZ data on-demand from GeoJSON...');
         const data = await loadHazardData('safdz');
 
         setHazardDataLoaded(prev => ({
@@ -410,8 +410,19 @@ export const AgriculturalMapView3D = React.memo(({
 
         // Update SAFDZ data state
         setSafdzData(data);
+        setSafdzLoading(false);
       } catch (error) {
         console.error('❌ Failed to load SAFDZ data:', error);
+
+        // Set error state to prevent further loading attempts
+        setSafdzError('SAFDZ data not found. Please ensure iligan_safdz.geojson exists in the public folder.');
+        setSafdzLoading(false);
+
+        // Mark as loaded (failed) to prevent repeated attempts
+        setHazardDataLoaded(prev => ({
+          ...prev,
+          safdz: null
+        }));
       }
     };
 
@@ -698,6 +709,8 @@ export const AgriculturalMapView3D = React.memo(({
         // Add GeoJSON source
         console.log('🗺️ Adding SAFDZ source with', safdzData.features.length, 'features');
         console.log('🗺️ Map style loaded:', map.isStyleLoaded());
+        console.log('🗺️ First feature properties:', safdzData.features[0]?.properties);
+        console.log('🗺️ First feature geometry type:', safdzData.features[0]?.geometry?.type);
         console.log('🗺️ Existing layers:', map.getStyle()?.layers?.map(l => l.id));
 
         map.addSource('safdz-zones', {
@@ -798,6 +811,24 @@ export const AgriculturalMapView3D = React.memo(({
           map.setLayoutProperty('safdz-fill', 'visibility', 'visible');
           const renderedFeatures = map.querySourceFeatures('safdz-zones');
           console.log('🎨 Rendered SAFDZ features:', renderedFeatures.length);
+          
+          // Check the bounds of the data
+          const bounds = safdzData.features.reduce((bounds: any, feature: any) => {
+            if (feature.geometry?.coordinates) {
+              const coords = feature.geometry.coordinates;
+              // For polygons/multipolygons, get first coordinate
+              const firstCoord = Array.isArray(coords[0]) 
+                ? (Array.isArray(coords[0][0]) ? coords[0][0][0] : coords[0][0])
+                : coords;
+              if (firstCoord && firstCoord.length >= 2) {
+                console.log('📍 Sample coordinate:', firstCoord);
+              }
+            }
+            return bounds;
+          }, null);
+          
+          console.log('🗺️ Current map center:', map.getCenter());
+          console.log('🗺️ Current map zoom:', map.getZoom());
         }
 
         // PROGRESSIVE LOADING: Apply complex filters after initial render
@@ -1188,6 +1219,32 @@ export const AgriculturalMapView3D = React.memo(({
     };
   }, [aiResults, safdzData]);
 
+  // Adjust map padding when side panels are open to prevent content overlap
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || isMobile || !map.loaded()) return;
+
+    // Calculate padding based on open panels
+    const hasRightPanel = showHazardsPanel || showMapAnalytics || showCollectPanel;
+    const padding = {
+      top: 100, // Header space
+      bottom: 20,
+      left: 20,
+      right: hasRightPanel ? 420 : 20 // Panel width (384px) + margin (36px)
+    };
+
+    // Apply padding to map viewport to prevent overlap
+    try {
+      map.easeTo({
+        padding: padding,
+        duration: 300
+      });
+    } catch (error) {
+      // Silently handle errors if map is not ready
+      console.debug('Map padding adjustment skipped:', error);
+    }
+  }, [showHazardsPanel, showMapAnalytics, showCollectPanel, isMobile]);
+
   // Handle minimal map load setup (defer heavy 3D operations)
   const handleMapLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
@@ -1437,8 +1494,8 @@ export const AgriculturalMapView3D = React.memo(({
         <div
           className={`absolute bg-white/90 rounded-xl shadow-2xl border border-gray-200 transition-all duration-300 ease-in-out ${
             isMobile
-              ? 'bottom-20 right-4 cursor-pointer max-w-[280px] z-[35]'
-              : `bottom-4 cursor-pointer ${showHazardsPanel || showMapAnalytics || showCollectPanel ? 'right-[400px]' : 'right-4'}`
+              ? 'bottom-20 left-2 right-2 cursor-pointer max-w-full z-[35]'
+              : `bottom-4 cursor-pointer ${showHazardsPanel || showMapAnalytics || showCollectPanel ? 'right-[420px]' : 'right-4'} max-w-[320px]`
           }`}
           onMouseEnter={() => !isMobile && setIsLegendExpanded(true)}
           onMouseLeave={() => !isMobile && setIsLegendExpanded(false)}
@@ -1446,7 +1503,7 @@ export const AgriculturalMapView3D = React.memo(({
         >
           {!isLegendExpanded ? (
             /* Compact View - Just color dots */
-            <div className={`p-3 flex items-center gap-2 flex-wrap ${isMobile ? 'justify-center' : 'max-w-[200px]'}`}>
+            <div className={`p-2 md:p-3 flex items-center gap-2 flex-wrap ${isMobile ? 'justify-center' : ''}`}>
 
               {/* Hazard Colors - only show if hazards are enabled */}
               {hazardLayers.find(l => l.id === 'flood' && l.enabled) && (
@@ -1470,7 +1527,7 @@ export const AgriculturalMapView3D = React.memo(({
             </div>
           ) : (
             /* Expanded View - Full details */
-            <div className={`${isMobile ? 'p-3 max-h-60 overflow-y-auto' : 'p-4'}`}>
+            <div className={`${isMobile ? 'p-3 max-h-[60vh] overflow-y-auto text-xs' : 'p-4'}`}>
               {/* Hazard Layers Legend */}
               {hazardLayers.some(layer => layer.enabled) && (
                 <div>
@@ -1641,14 +1698,14 @@ export const AgriculturalMapView3D = React.memo(({
         </div>
 
         {/* View controls */}
-        <div className="absolute bottom-4 left-4 flex flex-col gap-2.5 z-[400] min-w-[160px]">
+        <div className={`absolute ${isMobile ? 'bottom-4 left-2' : 'bottom-4 left-4'} flex flex-col gap-2 z-[400] ${isMobile ? 'min-w-[140px]' : 'min-w-[160px]'} transition-all duration-300`}>
           {/* View Mode Controls */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1.5 md:gap-2">
             <Button
               onClick={() => setViewState(prev => ({ ...prev, pitch: prev.pitch > 0 ? 0 : 45 }))}
               variant="outline"
               size="sm"
-              className="bg-white/90 hover:bg-white border-gray-300"
+              className="bg-white/90 hover:bg-white border-gray-300 text-xs md:text-sm"
             >
               {viewState.pitch > 0 ? '2D View' : '3D View'}
             </Button>
@@ -1656,7 +1713,7 @@ export const AgriculturalMapView3D = React.memo(({
               onClick={() => setViewState(prev => ({ ...prev, bearing: 0, pitch: 45 }))}
               variant="outline"
               size="sm"
-              className="bg-white/90 hover:bg-white border-gray-300"
+              className="bg-white/90 hover:bg-white border-gray-300 text-xs md:text-sm"
             >
               Reset View
             </Button>
@@ -1859,7 +1916,7 @@ export const AgriculturalMapView3D = React.memo(({
               }}
               variant="outline"
               size="sm"
-              className="bg-white/90 hover:bg-white border-gray-300"
+              className="bg-white/90 hover:bg-white border-gray-300 text-xs md:text-sm"
             >
               {mapStyle === 'mapbox://styles/mapbox/satellite-v9' ? 'Streets' : 'Satellite'}
             </Button>
@@ -1868,11 +1925,11 @@ export const AgriculturalMapView3D = React.memo(({
           
           {/* Zone Counter - only show when SAFDZ toggle is enabled */}
           {externalShowSafdzLayer && (safdzLoading || safdzError || safdzData) && (
-            <div className="px-3 py-2 bg-gray-800/70 rounded-md shadow-sm border border-gray-600/50 text-white text-sm font-normal text-center">
-              <div className="text-xs text-gray-300 mb-0.5">
+            <div className={`px-2 md:px-3 py-1.5 md:py-2 bg-gray-800/70 rounded-md shadow-sm border border-gray-600/50 text-white ${isMobile ? 'text-xs' : 'text-sm'} font-normal text-center`}>
+              <div className={`${isMobile ? 'text-[10px]' : 'text-xs'} text-gray-300 mb-0.5`}>
                 {safdzLoading ? 'Loading Zones...' : safdzError ? 'Error' : 'Total Zones'}
               </div>
-              <div className="text-lg font-bold">
+              <div className={`${isMobile ? 'text-base' : 'text-lg'} font-bold`}>
                 {safdzLoading ? '...' : safdzError ? '!' : safdzData.features.length}
               </div>
             </div>

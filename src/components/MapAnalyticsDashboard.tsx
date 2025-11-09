@@ -62,7 +62,7 @@ export const MapAnalyticsDashboard: React.FC<MapAnalyticsDashboardProps> = ({
   };
 
   return (
-    <div className={`fixed z-[500] bg-card/95 backdrop-blur-sm border border-border shadow-xl transform transition-transform duration-300 ease-in-out ${
+    <div className={`fixed z-[500] bg-card/95 backdrop-blur-sm border border-border shadow-xl transition-all duration-300 ease-in-out ${
       isMobile
         ? 'top-0 left-0 right-0 bottom-0 w-full h-full'
         : 'top-0 right-0 w-96 h-screen border-l'
@@ -92,11 +92,11 @@ export const MapAnalyticsDashboard: React.FC<MapAnalyticsDashboardProps> = ({
 
           <div className="overflow-y-auto flex-1">
             {/* Coverage Area */}
-            <div className="p-4 border-b">
+            <div className="p-3 md:p-4 border-b">
               <div className="flex items-start gap-2 mb-2">
-                <MapPin className="w-4 h-4 text-primary mt-0.5" />
-                <div>
-                  <div className="text-sm font-medium">Coverage Area</div>
+                <MapPin className="w-3 h-3 md:w-4 md:h-4 text-primary mt-0.5 flex-shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-xs md:text-sm font-medium">Coverage Area</div>
                   <div className="text-xs text-muted-foreground">
                     Iligan City and surrounding municipalities (Northern Mindanao)
                   </div>
@@ -105,10 +105,10 @@ export const MapAnalyticsDashboard: React.FC<MapAnalyticsDashboardProps> = ({
             </div>
 
             {/* Key Statistics */}
-            <div className="p-4 border-b space-y-3">
-              <div className="text-sm font-medium mb-3">Key Statistics</div>
+            <div className="p-3 md:p-4 border-b space-y-3">
+              <div className="text-xs md:text-sm font-medium mb-3">Key Statistics</div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2 md:gap-3">
                 <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
                   <CardContent className="p-3">
                     <div className="text-xs text-muted-foreground">Available Land</div>
@@ -171,8 +171,8 @@ export const MapAnalyticsDashboard: React.FC<MapAnalyticsDashboardProps> = ({
             </div>
 
             {/* Crop Suitability Analysis */}
-            <div className="p-4 border-b">
-              <div className="text-sm font-medium mb-3">Crop Suitability Summary</div>
+            <div className="p-3 md:p-4 border-b">
+              <div className="text-xs md:text-sm font-medium mb-3">Crop Suitability Summary</div>
               <div className="space-y-2">
                 {Object.entries(cropStats)
                   .sort((a, b) => b[1].highlySuitable - a[1].highlySuitable)
@@ -220,8 +220,8 @@ export const MapAnalyticsDashboard: React.FC<MapAnalyticsDashboardProps> = ({
             </div>
 
             {/* Visible Areas */}
-            <div className="p-4 border-b">
-              <div className="text-sm font-medium mb-2">Visible Areas</div>
+            <div className="p-3 md:p-4 border-b">
+              <div className="text-xs md:text-sm font-medium mb-2">Visible Areas</div>
               <div className="flex flex-wrap gap-1.5">
                 {visibleBarangays.map((name, idx) => (
                   <Badge key={idx} variant="secondary" className="text-xs">
@@ -232,8 +232,8 @@ export const MapAnalyticsDashboard: React.FC<MapAnalyticsDashboardProps> = ({
             </div>
 
             {/* Key Features */}
-            <div className="p-4">
-              <div className="text-sm font-medium mb-3">Key Features</div>
+            <div className="p-3 md:p-4">
+              <div className="text-xs md:text-sm font-medium mb-3">Key Features</div>
               <div className="space-y-2 text-xs">
                 <div className="flex items-start gap-2">
                   <div className="w-3 h-3 rounded-full bg-green-500 mt-0.5 flex-shrink-0" />
@@ -275,9 +275,9 @@ export const MapAnalyticsDashboard: React.FC<MapAnalyticsDashboardProps> = ({
             </div>
 
             {/* AlphaEarth Info */}
-            <div className="p-4 border-t">
+            <div className="p-3 md:p-4 border-t">
               <Alert>
-                <Info className="h-4 w-4" />
+                <Info className="h-3 w-3 md:h-4 md:w-4 flex-shrink-0" />
                 <AlertDescription className="text-xs">
                   <div className="font-medium mb-1">Enhanced with AlphaEarth</div>
                   <div>

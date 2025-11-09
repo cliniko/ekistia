@@ -88,11 +88,26 @@ async function loadShapefileData(): Promise<any> {
     let result = await source.read();
 
     while (!result.done) {
-      features.push(result.value);
+      if (result.value) {
+        features.push(result.value);
+      }
       result = await source.read();
     }
 
     console.log(`📊 Read ${features.length} features from shapefile`);
+    
+    // Log first feature for debugging
+    if (features.length > 0) {
+      console.log('🔍 First feature sample:', {
+        type: features[0].type,
+        hasGeometry: !!features[0].geometry,
+        geometryType: features[0].geometry?.type,
+        hasProperties: !!features[0].properties,
+        propertiesKeys: features[0].properties ? Object.keys(features[0].properties) : [],
+        sampleProperties: features[0].properties,
+        coordinateSample: features[0].geometry?.coordinates?.[0]?.[0]?.[0] || features[0].geometry?.coordinates?.[0]?.[0] || 'N/A'
+      });
+    }
 
     // Convert to GeoJSON format for Mapbox GL
     const geojson = {

@@ -47,7 +47,7 @@ export const HazardPanel: React.FC<HazardPanelProps> = ({
   const enabledCount = hazardLayers.filter(l => l.enabled).length;
 
   return (
-    <div className={`fixed z-[500] bg-card/95 backdrop-blur-sm border border-border shadow-xl ${
+    <div className={`fixed z-[500] bg-card/95 backdrop-blur-sm border border-border shadow-xl transition-all duration-300 ${
       isMobile
         ? 'top-0 left-0 right-0 bottom-0 w-full h-full'
         : 'top-0 right-0 w-96 h-screen border-l'
@@ -55,13 +55,13 @@ export const HazardPanel: React.FC<HazardPanelProps> = ({
       {/* Sidebar Content */}
       <div className="flex flex-col h-full">
         {/* Header */}
-        <CardHeader className="pb-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-orange-500" />
-              <h3 className="font-semibold">Hazard Layers</h3>
+        <CardHeader className="pb-3 md:pb-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <AlertTriangle className="w-4 h-4 md:w-5 md:h-5 text-orange-500 flex-shrink-0" />
+              <h3 className="font-semibold text-sm md:text-base truncate">Hazard Layers</h3>
               {enabledCount > 0 && (
-                <Badge variant="destructive">
+                <Badge variant="destructive" className="flex-shrink-0">
                   {enabledCount}
                 </Badge>
               )}
@@ -70,7 +70,7 @@ export const HazardPanel: React.FC<HazardPanelProps> = ({
               onClick={onClose}
               variant="ghost"
               size="sm"
-              className="h-8 w-8 p-0"
+              className="h-8 w-8 p-0 flex-shrink-0"
             >
               <X className="w-4 h-4" />
             </Button>
@@ -78,9 +78,9 @@ export const HazardPanel: React.FC<HazardPanelProps> = ({
         </CardHeader>
 
         {/* Info Banner */}
-        <div className="px-4 py-3">
+        <div className="px-3 md:px-4 py-2 md:py-3">
           <Alert>
-            <Info className="h-4 w-4" />
+            <Info className="h-3 w-3 md:h-4 md:w-4 flex-shrink-0" />
             <AlertDescription className="text-xs">
               Visualize flood zones, landslide susceptibility, slope analysis, land use patterns, and ancestral domains with pixelated grid overlays following international hazard standards.
             </AlertDescription>
@@ -88,10 +88,10 @@ export const HazardPanel: React.FC<HazardPanelProps> = ({
         </div>
 
         {/* Global Opacity Control */}
-        <div className="px-4 py-3 border-b">
+        <div className="px-3 md:px-4 py-2 md:py-3 border-b">
           <div className="flex items-center justify-between mb-2">
             <Label className="text-xs font-medium text-muted-foreground">Global Opacity</Label>
-            <span className="text-xs font-mono text-foreground">{Math.round(globalOpacity * 100)}%</span>
+            <span className="text-xs font-mono text-foreground flex-shrink-0">{Math.round(globalOpacity * 100)}%</span>
           </div>
           <Slider
             value={[globalOpacity * 100]}

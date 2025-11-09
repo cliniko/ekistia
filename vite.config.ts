@@ -13,7 +13,6 @@ const geojsonRewritePlugin = () => ({
       const largeGeojsonFiles = [
         '/iligan_flood_hazard.geojson',
         '/iligan_landslide_hazard.geojson',
-        '/iligan_safdz.geojson',
         '/iligan_slope.geojson',
         '/iligan_landuse.geojson',
         '/iligan_ancestral_domain.geojson'

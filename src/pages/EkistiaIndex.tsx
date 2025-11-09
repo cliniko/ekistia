@@ -56,7 +56,45 @@ const EkistiaIndex = React.memo(() => {
   const [hazardLayers, setHazardLayers] = useState<HazardLayerConfig[]>([]);
   const [globalHazardOpacity, setGlobalHazardOpacity] = useState(0.5);
   const [showSafdzLayer, setShowSafdzLayer] = useState(false);
+  const [safdzPanelLeft, setSafdzPanelLeft] = useState<string>('1rem'); // Default to left-4 (16px)
 
+  // Calculate SAFDZ panel left position to align with header's content left edge
+  useEffect(() => {
+    const calculateSafdzPanelLeft = () => {
+      if (isMobile) {
+        setSafdzPanelLeft('0.5rem'); // left-2 (8px) for mobile
+        return;
+      }
+
+      // If any side panel is open, header is fixed at left-4 (16px)
+      if (showMapAnalytics || showCollectPanel || showHazardsPanel) {
+        setSafdzPanelLeft('1rem'); // left-4 (16px)
+        return;
+      }
+
+      // When header is centered, calculate its outer left edge
+      const viewportWidth = window.innerWidth;
+      const headerMaxWidth = 1280; // max-w-7xl
+      const headerHorizontalMargin = 32; // 2rem for w-[calc(100%-2rem)]
+
+      // Calculate effective header width
+      const effectiveHeaderWidth = Math.min(viewportWidth - headerHorizontalMargin, headerMaxWidth);
+
+      // Calculate left edge of header element (centered) - align with outer edge
+      const headerElementLeft = (viewportWidth - effectiveHeaderWidth) / 2;
+
+      setSafdzPanelLeft(`${headerElementLeft}px`);
+    };
+
+    // Initial calculation
+    calculateSafdzPanelLeft();
+
+    // Recalculate on window resize
+    window.addEventListener('resize', calculateSafdzPanelLeft);
+
+    // Cleanup
+    return () => window.removeEventListener('resize', calculateSafdzPanelLeft);
+  }, [isMobile, showMapAnalytics, showCollectPanel, showHazardsPanel]);
 
   // SAFDZ data is now loaded on-demand by the hazard layer system
 
@@ -171,25 +209,30 @@ const EkistiaIndex = React.memo(() => {
         onAIResultsGenerated={setAiResults}
       />
 
-      {/* Floating SAFDZ Layer Toggle */}
-      <div className="fixed top-[120px] left-4 z-[400] bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-3">
-        <label className="flex items-center gap-3 cursor-pointer group">
+      {/* Floating SAFDZ Layer Toggle - Positioned under header's left side */}
+      <div 
+        className={`fixed ${isMobile ? 'top-20 left-2 right-2' : 'top-[88px]'} z-[400] bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-2 md:p-3 ${isMobile ? 'max-w-full' : 'max-w-[280px]'} transition-all duration-300`}
+        style={!isMobile ? { left: safdzPanelLeft } : undefined}
+      >
+        <label className="flex items-center gap-2 md:gap-3 cursor-pointer group">
           <input
             type="checkbox"
             checked={showSafdzLayer}
             onChange={(e) => setShowSafdzLayer(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500 focus:ring-2"
+            className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500 focus:ring-2 flex-shrink-0"
           />
-          <div className="flex items-center gap-2">
-            <span className="text-green-600">🌱</span>
-            <span className="text-sm font-medium text-foreground group-hover:text-green-600 transition-colors">
+          <div className="flex items-center gap-1 md:gap-2 min-w-0">
+            <span className="text-green-600 flex-shrink-0">🌱</span>
+            <span className="text-xs md:text-sm font-medium text-foreground group-hover:text-green-600 transition-colors truncate">
               SAFDZ Zones
             </span>
           </div>
         </label>
-        <div className="text-xs text-muted-foreground mt-2 max-w-[200px]">
-          Strategic Agriculture & Fisheries Development Zones
-        </div>
+        {!isMobile && (
+          <div className="text-xs text-muted-foreground mt-2 max-w-[200px]">
+            Strategic Agriculture & Fisheries Development Zones
+          </div>
+        )}
       </div>
 
       {/* Map Analytics Dashboard */}
@@ -222,7 +265,7 @@ const EkistiaIndex = React.memo(() => {
 
       {/* Selected Barangay Details Panel */}
       {selectedBarangay && (
-        <div className={`fixed ${isMobile ? 'bottom-16 left-4 right-4 top-auto z-30' : 'top-24 right-4 z-30 w-96'} max-h-[calc(100vh-120px)] overflow-auto bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border transition-all duration-300 ease-in-out`}>
+        <div className={`fixed ${isMobile ? 'bottom-4 left-2 right-2 top-auto z-30 max-h-[calc(100vh-8rem)]' : `top-24 ${showHazardsPanel || showMapAnalytics || showCollectPanel ? 'right-[420px]' : 'right-4'} z-30 w-96 max-h-[calc(100vh-120px)]`} overflow-auto bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border transition-all duration-300 ease-in-out`}>
           <BarangayDetails
             barangay={selectedBarangay}
             selectedCrop={selectedCrop}
@@ -233,8 +276,8 @@ const EkistiaIndex = React.memo(() => {
 
       {/* AI Results Panel */}
       {aiResults && !selectedBarangay && (
-        <div className={`fixed ${isMobile ? 'bottom-16 left-4 right-4 top-auto z-30' : 'bottom-6 left-6 z-30 w-96'} bg-white/95 backdrop-blur-sm rounded-lg shadow-xl border border-gray-200 transition-all duration-300 ease-in-out`}>
-          <div className="p-4">
+        <div className={`fixed ${isMobile ? 'bottom-4 left-2 right-2 top-auto z-30 max-h-[calc(100vh-8rem)]' : `bottom-6 ${showHazardsPanel || showMapAnalytics || showCollectPanel ? 'left-6 right-[420px]' : 'left-6'} z-30 w-96 max-h-[calc(100vh-8rem)]`} bg-white/95 backdrop-blur-sm rounded-lg shadow-xl border border-gray-200 transition-all duration-300 ease-in-out overflow-auto`}>
+          <div className="p-3 md:p-4">
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>

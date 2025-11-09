@@ -76,6 +76,19 @@ export const HAZARD_OPACITY = {
 const hazardDataCache = new Map<string, any>();
 
 /**
+ * Clear cached hazard data
+ */
+export function clearHazardCache(hazardType?: keyof typeof HAZARD_DATA_URLS | 'safdz') {
+  if (hazardType) {
+    hazardDataCache.delete(hazardType);
+    console.log(`🗑️ Cleared cache for ${hazardType}`);
+  } else {
+    hazardDataCache.clear();
+    console.log('🗑️ Cleared all hazard cache');
+  }
+}
+
+/**
  * Load hazard GeoJSON data
  */
 export async function loadHazardData(hazardType: keyof typeof HAZARD_DATA_URLS | 'safdz'): Promise<any> {
@@ -94,9 +107,11 @@ export async function loadHazardData(hazardType: keyof typeof HAZARD_DATA_URLS |
   }
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      cache: 'no-cache' // Prevent browser caching
+    });
     if (!response.ok) {
-      throw new Error(`Failed to load ${hazardType} hazard data: ${response.statusText}`);
+      throw new Error(`Failed to load ${hazardType} hazard data: ${response.statusText} (${response.status})`);
     }
 
     const data = await response.json();
