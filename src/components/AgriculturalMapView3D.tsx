@@ -1197,14 +1197,19 @@ export const AgriculturalMapView3D = React.memo(({
     setIsMapReady(true);
     console.log('✅ Basic map loaded and ready');
 
-    // Hide most labels but keep barangay names visible
+    // Hide most labels but keep barangay names and road names visible
     const hideLabels = () => {
       const layers = map.getStyle().layers;
       if (layers) {
         layers.forEach((layer) => {
           if (layer.type === 'symbol' && layer.id) {
-            // Hide all labels except we'll add our own barangay labels
-            map.setLayoutProperty(layer.id, 'visibility', 'none');
+            // Keep road name labels and barangay labels visible
+            const isRoadLabel = /road|street|motorway|primary|secondary|tertiary|trunk|highway/i.test(layer.id);
+            const isBarangayLabel = layer.id === 'barangay-labels';
+            if (!isRoadLabel && !isBarangayLabel) {
+              // Hide all labels except road labels and barangay labels
+              map.setLayoutProperty(layer.id, 'visibility', 'none');
+            }
           }
         });
       }

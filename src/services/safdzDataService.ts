@@ -1,9 +1,11 @@
 /**
- * SAFDZ Data Service - Loads SAFDZ GeoJSON data on demand
+ * SAFDZ Data Service - Loads SAFDZ shapefile data on demand
  * This service loads data only when requested, similar to hazard layers.
  *
  * Debug mode: Set VITE_DEBUG_LOADING=true to see detailed logs
  */
+
+import { open } from 'shapefile';
 
 // Debug flag - enable detailed logging
 const DEBUG = import.meta.env.VITE_DEBUG_LOADING === 'true';
@@ -20,32 +22,11 @@ let isLoading = false;
 function initializeSafdzData() {
   if (!safdzDataPromise && !isLoading) {
     isLoading = true;
-    
+
     const startTime = DEBUG ? performance.now() : 0;
 
-    // Add cache-busting parameter to prevent browser caching issues
-    const cacheBust = `?t=${Date.now()}`;
-    safdzDataPromise = fetch(`/iligan_safdz.geojson${cacheBust}`, {
-      headers: {
-        'Accept': 'application/json',
-        'Accept-Encoding': 'gzip, deflate'
-      },
-      // Ensure fresh request
-      cache: 'no-cache'
-    })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
-        }
-
-        // Check content type to ensure we're getting JSON
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          throw new Error(`Expected JSON response but got: ${contentType}`);
-        }
-
-        return response.json();
-      })
+    // Load shapefile directly from the public directory
+    safdzDataPromise = loadShapefileData()
       .then(data => {
         if (!data || !data.features || !Array.isArray(data.features)) {
           throw new Error('Invalid SAFDZ data format');
@@ -53,7 +34,7 @@ function initializeSafdzData() {
 
         safdzDataCache = data;
         isLoading = false;
-        
+
         if (DEBUG) {
           const totalTime = performance.now() - startTime;
           console.log(`✅ SAFDZ loaded: ${data.features.length} features (${Math.round(totalTime)}ms)`);
@@ -61,7 +42,7 @@ function initializeSafdzData() {
           // Single clean success message in production
           console.log(`✅ Map data ready (${data.features.length} zones)`);
         }
-        
+
         return data;
       })
       .catch(error => {
@@ -73,6 +54,59 @@ function initializeSafdzData() {
   }
 
   return safdzDataPromise;
+}
+
+/**
+ * Load SAFDZ data from shapefile using the shapefile library
+ */
+async function loadShapefileData(): Promise<any> {
+  try {
+    console.log('📁 Loading SAFDZ shapefile...');
+
+    // Fetch the shapefile and dbf files as ArrayBuffers for browser compatibility
+    const [shpResponse, dbfResponse] = await Promise.all([
+      fetch('/ILIGAN SAFDZ.shp'),
+      fetch('/ILIGAN SAFDZ.dbf')
+    ]);
+
+    if (!shpResponse.ok || !dbfResponse.ok) {
+      throw new Error(`Failed to fetch shapefile: SHP ${shpResponse.status}, DBF ${dbfResponse.status}`);
+    }
+
+    const shpBuffer = await shpResponse.arrayBuffer();
+    const dbfBuffer = await dbfResponse.arrayBuffer();
+
+    console.log('✅ Shapefile and DBF files fetched successfully');
+
+    // Open the shapefile using ArrayBuffers
+    const source = await open(shpBuffer, dbfBuffer);
+
+    console.log('✅ Shapefile opened successfully');
+
+    // Read all features from the shapefile
+    const features: any[] = [];
+    let result = await source.read();
+
+    while (!result.done) {
+      features.push(result.value);
+      result = await source.read();
+    }
+
+    console.log(`📊 Read ${features.length} features from shapefile`);
+
+    // Convert to GeoJSON format for Mapbox GL
+    const geojson = {
+      type: 'FeatureCollection',
+      features: features
+    };
+
+    console.log('✅ Converted to GeoJSON format');
+
+    return geojson;
+  } catch (error) {
+    console.error('❌ Error loading shapefile:', error);
+    throw error;
+  }
 }
 
 /**
