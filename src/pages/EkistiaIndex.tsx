@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import EkistiaHeader from '@/components/EkistiaHeader';
 import AgriculturalMapView3D from '@/components/AgriculturalMapView3D';
 import BarangayDetails from '@/components/BarangayDetails';
@@ -10,6 +12,7 @@ import LoadingScreen from '@/components/LoadingScreen';
 import type { HazardLayerConfig } from '@/components/AgriculturalHazardLayerControl';
 import { barangayData } from '@/data/barangayData';
 import { Barangay, CropType } from '@/types/agricultural';
+import { SAFDZ_CLASSIFICATIONS } from '@/types/safdz';
 
 const EkistiaIndex = React.memo(() => {
   const [barangays] = useState<Barangay[]>(barangayData);
@@ -33,6 +36,20 @@ const EkistiaIndex = React.memo(() => {
       '112': true, // Good Agricultural Land
       '113': true, // Fair Agricultural Land
       '117': true  // Marginal Agricultural Land
+    },
+    safdzZoneTypes: {
+      '1': true,   // Strategic CCP - enabled by default
+      '2': false,  // Strategic Livestock
+      '3': false,  // Strategic Fishery
+      '4': false,  // Integrated Crop/Livestock
+      '5': false,  // Integrated Crop/Fishery
+      '6': false,  // Integrated Crop/Livestock/Fishery
+      '7': false,  // Integrated Fishery/Livestock
+      '8': false,  // NIPAS
+      '9': false,  // Rangelands/PAAD
+      '10': false, // Sub-watershed/Forestry
+      'BU': false, // Built-Up Areas
+      'WB': false  // Water Bodies
     },
     zoningTypes: {
       'Strategic Agriculture': true
@@ -211,26 +228,87 @@ const EkistiaIndex = React.memo(() => {
 
       {/* Floating SAFDZ Layer Toggle - Positioned under header's left side */}
       <div 
-        className={`fixed ${isMobile ? 'top-20 left-2 right-2' : 'top-[88px]'} z-[400] bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-2 md:p-3 ${isMobile ? 'max-w-full' : 'max-w-[280px]'} transition-all duration-300`}
+        className={`fixed ${isMobile ? 'top-[150px] left-2 right-2 max-h-[calc(100vh-250px)] overflow-y-auto' : 'top-[88px]'} z-[400] bg-card/95 backdrop-blur-sm rounded-lg shadow-lg border p-2 md:p-3 ${isMobile ? 'max-w-full' : 'max-w-[280px]'} transition-all duration-300`}
         style={!isMobile ? { left: safdzPanelLeft } : undefined}
       >
         <label className="flex items-center gap-2 md:gap-3 cursor-pointer group">
           <input
             type="checkbox"
             checked={showSafdzLayer}
-            onChange={(e) => setShowSafdzLayer(e.target.checked)}
+            onChange={(e) => {
+              const isEnabled = e.target.checked;
+              setShowSafdzLayer(isEnabled);
+              // When enabling, reset to show only Strategic CCP
+              if (isEnabled) {
+                setSafdzFilters(prev => ({
+                  ...prev,
+                  safdzZoneTypes: {
+                    '1': true,   // Strategic CCP - enabled
+                    '2': false, '3': false, '4': false, '5': false, '6': false,
+                    '7': false, '8': false, '9': false, '10': false, 'BU': false, 'WB': false
+                  }
+                }));
+              }
+            }}
             className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500 focus:ring-2 flex-shrink-0"
           />
-          <div className="flex items-center gap-1 md:gap-2 min-w-0">
-            <span className="text-green-600 flex-shrink-0">🌱</span>
-            <span className="text-xs md:text-sm font-medium text-foreground group-hover:text-green-600 transition-colors truncate">
-              SAFDZ Zones
-            </span>
+          <div className="text-xs text-muted-foreground">
+            Strategic Agriculture & Fisheries Development Zones
           </div>
         </label>
-        {!isMobile && (
-          <div className="text-xs text-muted-foreground mt-2 max-w-[200px]">
-            Strategic Agriculture & Fisheries Development Zones
+        
+        {/* SAFDZ Zone Types Checklist */}
+        {showSafdzLayer && (
+          <div className="mt-3 pt-3 border-t border-border/50">
+            <div className="text-xs font-medium text-foreground mb-2">Zone Types</div>
+            <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1">
+                {[
+                  { code: '1', label: 'Strategic CCP' },
+                  { code: '2', label: 'Strategic Livestock' },
+                  { code: '3', label: 'Strategic Fishery' },
+                  { code: '4', label: 'Integrated Crop/Livestock' },
+                  { code: '5', label: 'Integrated Crop/Fishery' },
+                  { code: '6', label: 'Integrated Crop/Livestock/Fishery' },
+                  { code: '7', label: 'Integrated Fishery/Livestock' },
+                  { code: '8', label: 'NIPAS' },
+                  { code: '9', label: 'Rangelands/PAAD' },
+                  { code: '10', label: 'Sub-watershed/Forestry' },
+                  { code: 'BU', label: 'Built-Up Areas' },
+                  { code: 'WB', label: 'Water Bodies' }
+                ].map(({ code, label }) => {
+                  const classification = SAFDZ_CLASSIFICATIONS[code];
+                  const isEnabled = safdzFilters.safdzZoneTypes?.[code] ?? true;
+                  
+                  return (
+                    <div key={code} className="flex items-center gap-2 text-xs">
+                      <Checkbox
+                        id={`safdz-panel-${code}`}
+                        checked={isEnabled}
+                        onCheckedChange={(checked) => {
+                          setSafdzFilters(prev => ({
+                            ...prev,
+                            safdzZoneTypes: {
+                              ...prev.safdzZoneTypes!,
+                              [code]: checked as boolean
+                            }
+                          }));
+                        }}
+                        className="w-3 h-3"
+                      />
+                      <div 
+                        className="w-3 h-3 rounded flex-shrink-0" 
+                        style={{ backgroundColor: classification?.color || '#94a3b8' }}
+                      />
+                      <Label 
+                        htmlFor={`safdz-panel-${code}`} 
+                        className="cursor-pointer flex-1 text-xs"
+                      >
+                        {label}
+                      </Label>
+                    </div>
+                  );
+                })}
+            </div>
           </div>
         )}
       </div>

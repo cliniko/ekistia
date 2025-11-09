@@ -104,7 +104,8 @@ export const AgriculturalMapView3D = React.memo(({
   const [safdzData, setSafdzData] = useState<any>(null);
   const [safdzLoading, setSafdzLoading] = useState(true);
   const [safdzError, setSafdzError] = useState<string | null>(null);
-  const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/streets-v12');
+  // Satellite provides best contrast for agricultural data overlays and real ground conditions
+  const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/satellite-streets-v12');
   const [load3DFeatures, setLoad3DFeatures] = useState(false); // Defer 3D loading
   const [safdzLayersReady, setSafdzLayersReady] = useState(false); // Track SAFDZ layer rendering
   const [isMapReady, setIsMapReady] = useState(false); // Track when basic map is loaded
@@ -140,22 +141,50 @@ export const AgriculturalMapView3D = React.memo(({
     try {
       const filterExpressions: any[] = ['all'];
 
-      // Filter by SAFDZ zones (using lmuCategories mapping)
-      // Map filter categories to SAFDZ codes
-      const safdzCodes: string[] = [];
-      if (filters.lmuCategories['111']) safdzCodes.push('1'); // Strategic CCP
-      if (filters.lmuCategories['112']) safdzCodes.push('2'); // Strategic Livestock
-      if (filters.lmuCategories['113']) safdzCodes.push('3'); // Strategic Fishery
-      if (filters.lmuCategories['117']) safdzCodes.push('8'); // NIPAS
+      // Filter by SAFDZ zone types (if safdzZoneTypes filter is available)
+      if (filters.safdzZoneTypes) {
+        const enabledZoneTypes = Object.entries(filters.safdzZoneTypes)
+          .filter(([_, enabled]) => enabled)
+          .map(([code, _]) => code);
+        
+        if (enabledZoneTypes.length > 0) {
+          // Filter by enabled SAFDZ zone types
+          // Handle both exact matches and mixed classifications (e.g., "9 / BU", "2 / BU")
+          const zoneTypeFilter: any[] = ['any'];
+          enabledZoneTypes.forEach(code => {
+            // Exact match
+            zoneTypeFilter.push(['==', ['get', 'SAFDZ'], code]);
+            // Match mixed classifications - check if SAFDZ contains the code
+            // Use 'match' with pattern matching for strings like "9 / BU"
+            zoneTypeFilter.push([
+              'match',
+              ['get', 'SAFDZ'],
+              [`${code} / *`, `* / ${code}`, `* ${code} *`, `${code} *`],
+              true,
+              false
+            ]);
+          });
+          filterExpressions.push(zoneTypeFilter);
+        } else {
+          // If no zone types are selected, hide all zones
+          filterExpressions.push(['literal', false]);
+        }
+      } else {
+        // Fallback to old LMU-based filtering if safdzZoneTypes not available
+        const safdzCodes: string[] = [];
+        if (filters.lmuCategories['111']) safdzCodes.push('1'); // Strategic CCP
+        if (filters.lmuCategories['112']) safdzCodes.push('2'); // Strategic Livestock
+        if (filters.lmuCategories['113']) safdzCodes.push('3'); // Strategic Fishery
+        if (filters.lmuCategories['117']) safdzCodes.push('8'); // NIPAS
 
-      // Add common zones if any category is enabled
-      if (safdzCodes.length > 0) {
-        // Also include variations (e.g., "1 / BU", "2 / BU")
-        safdzCodes.push('9', '10', 'BU', 'WB', 'Others');
-      }
+        // Add common zones if any category is enabled
+        if (safdzCodes.length > 0) {
+          safdzCodes.push('9', '10', 'BU', 'WB', 'Others');
+        }
 
-      if (safdzCodes.length > 0) {
-        filterExpressions.push(['in', ['get', 'SAFDZ'], ['literal', safdzCodes]]);
+        if (safdzCodes.length > 0) {
+          filterExpressions.push(['in', ['get', 'SAFDZ'], ['literal', safdzCodes]]);
+        }
       }
 
       // Filter by municipality/barangay search
@@ -211,6 +240,11 @@ export const AgriculturalMapView3D = React.memo(({
       '113': true, // Fair Agricultural Land
       '117': true  // Marginal Agricultural Land
     },
+    safdzZoneTypes: {
+      '1': true,   // Strategic CCP - enabled by default
+      '2': false, '3': false, '4': false, '5': false, '6': false,
+      '7': false, '8': false, '9': false, '10': false, 'BU': false, 'WB': false
+    },
     zoningTypes: {
       'Strategic Agriculture': true
     },
@@ -225,11 +259,11 @@ export const AgriculturalMapView3D = React.memo(({
   const currentFilters = externalSafdzFilters || defaultFilters;
 
   const [viewState, setViewState] = useState({
-    longitude: 124.2452,
-    latitude: 8.228,
-    zoom: 12,
-    pitch: 45, // 3D viewing angle
-    bearing: 0
+    longitude: 124.258855,
+    latitude: 8.246251,
+    zoom: 11.88,
+    pitch: 73.50,
+    bearing: 39.00
   });
 
   // Iligan City center coordinates
@@ -794,7 +828,7 @@ export const AgriculturalMapView3D = React.memo(({
               ['in', '9', ['get', 'SAFDZ']], '#FF8C00',
               '#DCDCDC'                                        // Default - Others - Gainsboro
             ],
-            'fill-opacity': 0.7, // Increased opacity for better visibility during debugging
+            'fill-opacity': 0.4, // Improved transparency to see underlying map features
             'fill-antialias': true // Smooth edges for better visuals
           },
           layout: {
@@ -911,7 +945,7 @@ export const AgriculturalMapView3D = React.memo(({
               '#696969'                                        // Default - Dim Gray
             ],
             'line-width': 2.0, // Increased width for better visibility during debugging
-            'line-opacity': 0.9 // Increased opacity for clear boundaries
+            'line-opacity': 0.6 // Improved transparency to match fill opacity
           },
           layout: {
             'visibility': 'visible'
@@ -1494,7 +1528,7 @@ export const AgriculturalMapView3D = React.memo(({
         <div
           className={`absolute bg-white/90 rounded-xl shadow-2xl border border-gray-200 transition-all duration-300 ease-in-out ${
             isMobile
-              ? 'bottom-20 left-2 right-2 cursor-pointer max-w-full z-[35]'
+              ? 'bottom-4 right-2 left-auto cursor-pointer max-w-[calc(100%-180px)] z-[35]'
               : `bottom-4 cursor-pointer ${showHazardsPanel || showMapAnalytics || showCollectPanel ? 'right-[420px]' : 'right-4'} max-w-[320px]`
           }`}
           onMouseEnter={() => !isMobile && setIsLegendExpanded(true)}
@@ -1684,15 +1718,16 @@ export const AgriculturalMapView3D = React.memo(({
                 </div>
               )}
 
-
-              {/* 3D Controls Info */}
-              <div className="mt-4 pt-4 border-t border-border">
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <div>• Right-click + drag to rotate</div>
-                  <div>• Ctrl + drag to change pitch</div>
-                  <div>• Scroll to zoom</div>
+              {/* 3D Controls Info - Only show if there are active legends */}
+              {(hazardLayers.some(layer => layer.enabled) || externalShowSafdzLayer) && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <div>• Right-click + drag to rotate</div>
+                    <div>• Ctrl + drag to change pitch</div>
+                    <div>• Scroll to zoom</div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
@@ -1702,7 +1737,7 @@ export const AgriculturalMapView3D = React.memo(({
           {/* View Mode Controls */}
           <div className="flex flex-col gap-1.5 md:gap-2">
             <Button
-              onClick={() => setViewState(prev => ({ ...prev, pitch: prev.pitch > 0 ? 0 : 45 }))}
+              onClick={() => setViewState(prev => ({ ...prev, pitch: prev.pitch > 0 ? 0 : 58 }))}
               variant="outline"
               size="sm"
               className="bg-white/90 hover:bg-white border-gray-300 text-xs md:text-sm"
@@ -1710,7 +1745,14 @@ export const AgriculturalMapView3D = React.memo(({
               {viewState.pitch > 0 ? '2D View' : '3D View'}
             </Button>
             <Button
-              onClick={() => setViewState(prev => ({ ...prev, bearing: 0, pitch: 45 }))}
+              onClick={() => setViewState(prev => ({ 
+                ...prev, 
+                longitude: 124.258855,
+                latitude: 8.246251,
+                zoom: 11.88,
+                bearing: 39.00, 
+                pitch: 73.50 
+              }))}
               variant="outline"
               size="sm"
               className="bg-white/90 hover:bg-white border-gray-300 text-xs md:text-sm"
@@ -1725,10 +1767,17 @@ export const AgriculturalMapView3D = React.memo(({
                 // Preserve current view state
                 const currentViewState = viewState;
 
-                // Change map style
-                const newStyle = mapStyle === 'mapbox://styles/mapbox/streets-v12'
-                  ? 'mapbox://styles/mapbox/satellite-v9'
-                  : 'mapbox://styles/mapbox/streets-v12';
+                // Change map style - cycle through Satellite-Streets → Outdoors → Light (faded) → Dark
+                let newStyle: string;
+                if (mapStyle === 'mapbox://styles/mapbox/satellite-streets-v12') {
+                  newStyle = 'mapbox://styles/mapbox/outdoors-v12';
+                } else if (mapStyle === 'mapbox://styles/mapbox/outdoors-v12') {
+                  newStyle = 'mapbox://styles/mapbox/navigation-day-v1';
+                } else if (mapStyle === 'mapbox://styles/mapbox/navigation-day-v1') {
+                  newStyle = 'mapbox://styles/mapbox/dark-v11';
+                } else {
+                  newStyle = 'mapbox://styles/mapbox/satellite-streets-v12';
+                }
 
                 setMapStyle(newStyle);
 
@@ -1830,7 +1879,7 @@ export const AgriculturalMapView3D = React.memo(({
                                 ['==', ['get', 'LMU_CODE'], '117'], '#ef4444', // Marginal Agricultural Land - Red
                                 '#94a3b8'                                       // Default - Gray for unknown
                               ],
-                              'fill-opacity': 0.5,
+                              'fill-opacity': 0.4, // Improved transparency to see underlying map features
                               'fill-antialias': false // Pixelated edges for consistency
                             }
                           });
@@ -1889,7 +1938,7 @@ export const AgriculturalMapView3D = React.memo(({
                                 '#64748b'                                       // Default - Dark Gray for unknown
                               ],
                               'line-width': 1.5,
-                              'line-opacity': 0.8
+                              'line-opacity': 0.6 // Improved transparency to match fill opacity
                             }
                           });
 
@@ -1918,7 +1967,13 @@ export const AgriculturalMapView3D = React.memo(({
               size="sm"
               className="bg-white/90 hover:bg-white border-gray-300 text-xs md:text-sm"
             >
-              {mapStyle === 'mapbox://styles/mapbox/satellite-v9' ? 'Streets' : 'Satellite'}
+              {mapStyle === 'mapbox://styles/mapbox/satellite-streets-v12'
+                ? 'Outdoors'
+                : mapStyle === 'mapbox://styles/mapbox/outdoors-v12'
+                ? 'Light'
+                : mapStyle === 'mapbox://styles/mapbox/navigation-day-v1'
+                ? 'Dark'
+                : 'Satellite'}
             </Button>
           </div>
           

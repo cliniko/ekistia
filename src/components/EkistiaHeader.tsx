@@ -18,6 +18,7 @@ interface EkistiaHeaderProps {
     maxHectares: number;
     searchBarangay: string;
     lmuCategories: { '111': boolean; '112': boolean; '113': boolean; '117': boolean };
+    safdzZoneTypes?: { [key: string]: boolean };
   };
   onSafdzFiltersChange?: (filters: any) => void;
   safdzData?: { features: any[] };
@@ -129,6 +130,47 @@ export const EkistiaHeader = ({
                       </div>
                     </div>
 
+                    {/* SAFDZ Zone Types */}
+                    {safdzFilters.safdzZoneTypes && (
+                      <div className="mb-4">
+                        <Label className="text-sm font-medium mb-2 block">SAFDZ Zone Types:</Label>
+                        <div className="max-h-48 overflow-y-auto space-y-2 pr-2">
+                          {[
+                            { key: '1', label: 'Strategic CCP', color: '#90EE90' },
+                            { key: '2', label: 'Strategic Livestock', color: '#6B46C1' },
+                            { key: '3', label: 'Strategic Fishery', color: '#ADD8E6' },
+                            { key: '4', label: 'Integrated Crop/Livestock', color: '#98D98E' },
+                            { key: '5', label: 'Integrated Crop/Fishery', color: '#9ED9CC' },
+                            { key: '6', label: 'Integrated Crop/Livestock/Fishery', color: '#B0BEC5' },
+                            { key: '7', label: 'Integrated Fishery/Livestock', color: '#8FA3C4' },
+                            { key: '8', label: 'NIPAS', color: '#DDA0DD' },
+                            { key: '9', label: 'Rangelands/PAAD', color: '#FFA500' },
+                            { key: '10', label: 'Sub-watershed/Forestry', color: '#2F4F2F' },
+                            { key: 'BU', label: 'Built-Up Areas', color: '#808080' },
+                            { key: 'WB', label: 'Water Bodies', color: '#4682B4' }
+                          ].map(({ key, label, color }) => (
+                            <div key={key} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`safdz-zone-${key}`}
+                                checked={safdzFilters.safdzZoneTypes![key] ?? false}
+                                onCheckedChange={(checked) => onSafdzFiltersChange?.({
+                                  ...safdzFilters,
+                                  safdzZoneTypes: {
+                                    ...safdzFilters.safdzZoneTypes!,
+                                    [key]: checked
+                                  }
+                                })}
+                              />
+                              <div className="w-3 h-3 rounded flex-shrink-0" style={{ backgroundColor: color }}></div>
+                              <Label htmlFor={`safdz-zone-${key}`} className="text-xs cursor-pointer flex-1">
+                                {label}
+                              </Label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Size Categories */}
                     <div className="mb-4">
                       <Label className="text-sm font-medium mb-2 block">Land Area Categories:</Label>
@@ -220,6 +262,7 @@ export const EkistiaHeader = ({
                           const filteredFeatures = safdzData.features.filter((f: any) => {
                             const hectares = f.properties.HECTARES || 0;
                             const lmuCode = f.properties.LMU_CODE || '';
+                            const safdzCode = f.properties.SAFDZ || '';
 
                             const matchesSize =
                               (hectares >= 100 && safdzFilters.sizeCategories.large) ||
@@ -229,10 +272,18 @@ export const EkistiaHeader = ({
 
                             const matchesRange = hectares >= safdzFilters.minHectares && hectares <= safdzFilters.maxHectares;
                             const matchesLmu = safdzFilters.lmuCategories[lmuCode as keyof typeof safdzFilters.lmuCategories];
+                            
+                            // Check SAFDZ zone type filter
+                            const matchesSafdzZone = !safdzFilters.safdzZoneTypes || 
+                              safdzFilters.safdzZoneTypes[safdzCode] ||
+                              (safdzCode.includes('/') && safdzCode.split('/').some((code: string) => 
+                                safdzFilters.safdzZoneTypes?.[code.trim()]
+                              ));
+                            
                             const matchesSearch = !safdzFilters.searchBarangay ||
                               f.properties.BRGY.toLowerCase().includes(safdzFilters.searchBarangay.toLowerCase());
 
-                            return matchesSize && matchesRange && matchesLmu && matchesSearch;
+                            return matchesSize && matchesRange && matchesLmu && matchesSafdzZone && matchesSearch;
                           });
                           const totalHectares = filteredFeatures.reduce((sum: number, f: any) => sum + (f.properties.HECTARES || 0), 0);
                           return `${filteredFeatures.length} zones • ${totalHectares.toFixed(1)} ha total`;
@@ -247,7 +298,12 @@ export const EkistiaHeader = ({
                         minHectares: 0,
                         maxHectares: 1000,
                         searchBarangay: '',
-                        lmuCategories: { '111': true, '112': true, '113': true, '117': true }
+                        lmuCategories: { '111': true, '112': true, '113': true, '117': true },
+                        safdzZoneTypes: safdzFilters.safdzZoneTypes ? {
+                          '1': true,   // Strategic CCP - enabled by default
+                          '2': false, '3': false, '4': false, '5': false, '6': false,
+                          '7': false, '8': false, '9': false, '10': false, 'BU': false, 'WB': false
+                        } : undefined
                       })}
                       variant="outline"
                       size="sm"
